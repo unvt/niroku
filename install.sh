@@ -124,28 +124,42 @@ clone_repository() {
 setup_nodejs() {
     log_info "Setting up Node.js dependencies..."
     
-    cd "$INSTALL_DIR"
-    
-    if [ -f "package.json" ]; then
-        npm install --silent
-        log_success "Node.js dependencies installed"
-    else
-        log_warning "No package.json found. Skipping Node.js setup."
+    if [ ! -d "$INSTALL_DIR" ]; then
+        log_error "Installation directory does not exist: $INSTALL_DIR"
+        return 1
     fi
+    
+    (
+        cd "$INSTALL_DIR" || exit 1
+        
+        if [ -f "package.json" ]; then
+            npm install --silent
+            log_success "Node.js dependencies installed"
+        else
+            log_warning "No package.json found. Skipping Node.js setup."
+        fi
+    )
 }
 
 # Setup Python dependencies
 setup_python() {
     log_info "Setting up Python dependencies..."
     
-    cd "$INSTALL_DIR"
-    
-    if [ -f "requirements.txt" ]; then
-        pip3 install --quiet -r requirements.txt
-        log_success "Python dependencies installed"
-    else
-        log_warning "No requirements.txt found. Skipping Python setup."
+    if [ ! -d "$INSTALL_DIR" ]; then
+        log_error "Installation directory does not exist: $INSTALL_DIR"
+        return 1
     fi
+    
+    (
+        cd "$INSTALL_DIR" || exit 1
+        
+        if [ -f "requirements.txt" ]; then
+            pip3 install --quiet -r requirements.txt
+            log_success "Python dependencies installed"
+        else
+            log_warning "No requirements.txt found. Skipping Python setup."
+        fi
+    )
 }
 
 # Configure Apache
@@ -153,11 +167,19 @@ configure_apache() {
     log_info "Configuring Apache web server..."
     
     # Enable required Apache modules
-    a2enmod rewrite headers ssl
+    for module in rewrite headers ssl; do
+        if ! a2enmod "$module" 2>/dev/null; then
+            log_warning "Failed to enable Apache module: $module"
+        fi
+    done
     
     # Set proper permissions for web root
-    chown -R "$APACHE_USER:$APACHE_USER" "$WEB_ROOT"
-    chmod -R 755 "$WEB_ROOT"
+    if [ -d "$WEB_ROOT" ]; then
+        chown -R "$APACHE_USER:$APACHE_USER" "$WEB_ROOT"
+        chmod -R 755 "$WEB_ROOT"
+    else
+        log_warning "Web root directory does not exist: $WEB_ROOT"
+    fi
     
     # Restart Apache
     systemctl restart apache2
@@ -191,7 +213,15 @@ display_summary() {
     echo ""
     log_info "Next steps:"
     echo "  1. Configure your map data in $WEB_ROOT"
-    echo "  2. Access the web interface at http://localhost or http://$(hostname -I | awk '{print $1}')"
+    
+    # Get primary IP address with better error handling
+    PRIMARY_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+    if [ -n "$PRIMARY_IP" ]; then
+        echo "  2. Access the web interface at http://localhost or http://$PRIMARY_IP"
+    else
+        echo "  2. Access the web interface at http://localhost"
+    fi
+    
     echo "  3. Refer to the manual: https://github.com/unvt/portable/wiki"
     echo "  4. For WiFi AP setup, see: https://github.com/unvt/portable/wiki"
     echo ""
