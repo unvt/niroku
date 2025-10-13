@@ -215,8 +215,16 @@ display_summary() {
     echo "  1. Configure your map data in $WEB_ROOT"
     
     # Get primary IP address with better error handling
-    PRIMARY_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
-    if [ -n "$PRIMARY_IP" ]; then
+    # Try multiple methods to get the primary IP
+    PRIMARY_IP=""
+    if command -v ip &> /dev/null; then
+        PRIMARY_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' | head -1)
+    fi
+    if [ -z "$PRIMARY_IP" ]; then
+        PRIMARY_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+    fi
+    
+    if [ -n "$PRIMARY_IP" ] && [ "$PRIMARY_IP" != "127.0.0.1" ]; then
         echo "  2. Access the web interface at http://localhost or http://$PRIMARY_IP"
     else
         echo "  2. Access the web interface at http://localhost"
