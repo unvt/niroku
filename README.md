@@ -35,13 +35,13 @@ JUMP26 (JICA UNVT Module Portable 26) is a version of UNVT Portable configured f
 The simplest way to install JUMP26:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/unvt/niroku/main/install.sh | sudo bash
+curl -fsSL https://unvt.github.io/niroku/install.sh | sudo -E bash -
 ```
 
 Or using wget:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/unvt/niroku/main/install.sh | sudo bash
+wget -qO- https://unvt.github.io/niroku/install.sh | sudo -E bash -
 ```
 
 ### Manual Installation
@@ -50,7 +50,7 @@ If you prefer to review the script before running:
 
 ```bash
 # Download the script
-curl -sL https://raw.githubusercontent.com/unvt/niroku/main/install.sh -o install.sh
+curl -fsSL https://unvt.github.io/niroku/install.sh -o install.sh
 
 # Review the script
 less install.sh

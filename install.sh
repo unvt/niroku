@@ -3,7 +3,7 @@ set -e
 
 # niroku - JUMP26 (JICA UNVT Module Portable 26) Installer for Raspberry Pi OS (trixie)
 # A pipe-to-shell installer for quick UNVT Portable setup with Caddy and Martin
-# Usage: curl -sL https://raw.githubusercontent.com/unvt/niroku/main/install.sh | bash
+# Usage: curl -fsSL https://unvt.github.io/niroku/install.sh | sudo -E bash -
 
 # Colors for output
 RED='\033[0;31m'
@@ -15,6 +15,9 @@ NC='\033[0m' # No Color
 # Configuration
 INSTALL_DIR="/opt/unvt-portable"
 DATA_DIR="/opt/unvt-portable/data"
+# Note: Update these versions periodically to use latest stable releases
+# Check https://github.com/caddyserver/caddy/releases
+# Check https://github.com/maplibre/martin/releases
 CADDY_VERSION="2.8.4"
 MARTIN_VERSION="0.14.2"
 
@@ -193,10 +196,13 @@ pmtiles:
     - /opt/unvt-portable/data
 web_ui: enable-for-all
 listen_addresses: "127.0.0.1:3000"
+# CORS is disabled here because it's handled by Caddy to avoid duplicate headers
 cors: false
 EOF
     
     # Create systemd service for Martin
+    # Note: Running as root for simplicity in portable/field deployment scenarios
+    # For production environments, consider creating a dedicated 'martin' user
     cat > /etc/systemd/system/martin.service << EOF
 [Unit]
 Description=Martin Tile Server
@@ -261,6 +267,8 @@ configure_caddy() {
 EOF
     
     # Create systemd service for Caddy with custom Caddyfile
+    # Note: Running as root for simplicity in portable/field deployment scenarios
+    # For production environments, consider using the 'caddy' user created by the package
     cat > /etc/systemd/system/caddy-niroku.service << EOF
 [Unit]
 Description=Caddy Web Server for UNVT Portable
