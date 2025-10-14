@@ -88,8 +88,17 @@ update_system() {
 install_dependencies() {
     log_info "Installing required dependencies..."
     
+    # Base packages from simple installer (PR #2)
+    # Plus additional packages needed for Caddy + Martin setup
     PACKAGES=(
+        "aria2"
+        "btop"
+        "gdal-bin"
         "git"
+        "jq"
+        "ruby"
+        "tmux"
+        "vim"
         "curl"
         "wget"
         "hostapd"

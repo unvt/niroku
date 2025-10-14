@@ -75,12 +75,13 @@ sudo ./install.sh
 The niroku installer will:
 
 1. ✅ Update system packages
-2. ✅ Install dependencies (git, curl, wget, etc.)
-3. ✅ Install **Caddy** web server (reverse proxy)
-4. ✅ Install **Martin** tile server (PMTiles hosting)
-5. ✅ Create installation directory at `/opt/unvt-portable`
-6. ✅ Configure both services to run automatically at boot
-7. ✅ Install tools for WiFi AP and QR code generation
+2. ✅ Install **base tools**: `aria2`, `btop`, `gdal-bin`, `git`, `jq`, `ruby`, `tmux`, `vim`
+3. ✅ Install **dependencies**: `curl`, `wget`, `hostapd`, `dnsmasq`, `qrencode`, and related packages
+4. ✅ Install **Caddy** web server (reverse proxy)
+5. ✅ Install **Martin** tile server (PMTiles hosting)
+6. ✅ Create installation directory at `/opt/unvt-portable`
+7. ✅ Configure both Caddy and Martin as systemd services to run automatically at boot
+8. ✅ Set up configuration files (`martin.yml` and `Caddyfile`)
 
 ## Post-Installation Steps
 
@@ -186,6 +187,46 @@ sudo chmod 644 /opt/unvt-portable/data/*.pmtiles
 # Restart Martin
 sudo systemctl restart martin
 ```
+
+## Uninstallation
+
+To remove niroku and all installed components:
+
+### Quick Uninstall (Pipe to Shell)
+
+```bash
+curl -fsSL https://unvt.github.io/niroku/uninstall.sh | sudo -E bash -
+```
+
+### Manual Uninstall (Recommended for Review)
+
+```bash
+# Download the uninstall script
+curl -fsSL https://unvt.github.io/niroku/uninstall.sh -o uninstall.sh
+
+# Review the script
+less uninstall.sh
+
+# Make it executable
+chmod +x uninstall.sh
+
+# Run the uninstaller
+sudo ./uninstall.sh
+```
+
+### What Gets Removed
+
+The uninstaller will:
+1. Stop and remove Martin tile server service
+2. Stop and remove Caddy-niroku web server service
+3. Remove Martin binary from `/usr/local/bin/martin`
+4. Remove Caddy package and repository configuration
+5. Remove UNVT Portable installation directory (`/opt/unvt-portable`)
+6. Remove base packages (`aria2`, `btop`, `gdal-bin`, `jq`, `ruby`, `tmux`, `vim`)
+7. Optionally remove comprehensive packages (you'll be prompted)
+8. Clean up unused dependencies
+
+The script will ask for confirmation before removing anything and show you exactly what will be removed.
 
 ## Development and Contributing
 
