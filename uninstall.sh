@@ -14,6 +14,10 @@ NC='\033[0m' # No Color
 # Configuration
 INSTALL_DIR="/opt/unvt-portable"
 
+# Package lists
+SIMPLE_PACKAGES=(aria2 btop gdal-bin jq ruby tmux vim)
+COMPREHENSIVE_PACKAGES=(apache2 nodejs npm python3-pip hostapd dnsmasq qrencode)
+
 # Logging functions
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -56,10 +60,14 @@ confirm_uninstall() {
         items_to_remove+=("  - Apache2 web server (will be stopped and disabled)")
     fi
     
+    # Get installed packages once for efficiency
+    local dpkg_list
+    dpkg_list=$(dpkg -l 2>/dev/null || true)
+    
     # Check for packages from simple install
     local packages_found=()
-    for pkg in aria2 btop gdal-bin jq ruby tmux vim; do
-        if dpkg -l | grep -q "^ii  $pkg "; then
+    for pkg in "${SIMPLE_PACKAGES[@]}"; do
+        if echo "$dpkg_list" | grep -q "^ii  $pkg "; then
             packages_found+=("$pkg")
         fi
     done
@@ -120,19 +128,21 @@ remove_unvt_portable() {
 remove_packages() {
     log_info "Checking for packages to remove..."
     
-    local packages_to_remove=()
+    # Get installed packages once for efficiency
+    local dpkg_list
+    dpkg_list=$(dpkg -l 2>/dev/null || true)
     
-    # Packages from simple install.sh (PR #2)
-    for pkg in aria2 btop gdal-bin jq ruby tmux vim; do
-        if dpkg -l | grep -q "^ii  $pkg "; then
+    local packages_to_remove=()
+    for pkg in "${SIMPLE_PACKAGES[@]}"; do
+        if echo "$dpkg_list" | grep -q "^ii  $pkg "; then
             packages_to_remove+=("$pkg")
         fi
     done
     
     if [ ${#packages_to_remove[@]} -gt 0 ]; then
-        log_info "Removing packages: ${packages_to_remove[*]}"
-        apt-get remove -y "${packages_to_remove[@]}"
-        log_success "Packages removed"
+        log_info "Purging packages: ${packages_to_remove[*]}"
+        apt-get purge -y "${packages_to_remove[@]}"
+        log_success "Packages purged"
         
         log_info "Cleaning up unused dependencies..."
         apt-get autoremove -y
@@ -146,20 +156,13 @@ remove_packages() {
 remove_comprehensive_packages() {
     log_info "Checking for comprehensive installation packages..."
     
-    # Ask user if they want to remove comprehensive packages
-    local comprehensive_packages=(
-        "apache2"
-        "nodejs"
-        "npm"
-        "python3-pip"
-        "hostapd"
-        "dnsmasq"
-        "qrencode"
-    )
+    # Get installed packages once for efficiency
+    local dpkg_list
+    dpkg_list=$(dpkg -l 2>/dev/null || true)
     
     local installed_comprehensive=()
-    for pkg in "${comprehensive_packages[@]}"; do
-        if dpkg -l | grep -q "^ii  $pkg "; then
+    for pkg in "${COMPREHENSIVE_PACKAGES[@]}"; do
+        if echo "$dpkg_list" | grep -q "^ii  $pkg "; then
             installed_comprehensive+=("$pkg")
         fi
     done
@@ -175,10 +178,10 @@ remove_comprehensive_packages() {
             read -p "Remove these packages? (y/N) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
-                log_info "Removing comprehensive packages..."
-                apt-get remove -y "${installed_comprehensive[@]}"
+                log_info "Purging comprehensive packages..."
+                apt-get purge -y "${installed_comprehensive[@]}"
                 apt-get autoremove -y
-                log_success "Comprehensive packages removed"
+                log_success "Comprehensive packages purged"
             else
                 log_info "Keeping comprehensive packages"
             fi
