@@ -74,7 +74,10 @@ check_system() {
 # Update system packages
 update_system() {
     log_info "Updating system packages..."
-    apt-get update -qq
+    if ! apt-get update -qq; then
+        log_error "Failed to update system packages. Please check your network connection and package sources."
+        exit 1
+    fi
     log_success "System packages updated"
 }
 
