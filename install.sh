@@ -2,7 +2,7 @@
 set -e
 
 # niroku - JUMP26 (JICA UNVT Module Portable 26) Installer for Raspberry Pi OS (trixie)
-# A pipe-to-shell installer for quick UNVT Portable setup
+# A pipe-to-shell installer for quick UNVT Portable setup with Caddy and Martin
 # Usage: curl -sL https://raw.githubusercontent.com/unvt/niroku/main/install.sh | bash
 
 # Colors for output
@@ -13,10 +13,10 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-UNVT_REPO="https://github.com/unvt/portable.git"
 INSTALL_DIR="/opt/unvt-portable"
-WEB_ROOT="/var/www/html"
-APACHE_USER="www-data"
+DATA_DIR="/opt/unvt-portable/data"
+CADDY_VERSION="2.8.4"
+MARTIN_VERSION="0.14.2"
 
 # Logging functions
 log_info() {
@@ -86,23 +86,22 @@ install_dependencies() {
         "git"
         "curl"
         "wget"
-        "apache2"
-        "nodejs"
-        "npm"
-        "python3"
-        "python3-pip"
         "hostapd"
         "dnsmasq"
         "qrencode"
+        "debian-keyring"
+        "debian-archive-keyring"
+        "apt-transport-https"
+        "ca-certificates"
     )
     
     apt-get install -y -qq "${PACKAGES[@]}"
     log_success "Dependencies installed"
 }
 
-# Clone UNVT Portable repository
-clone_repository() {
-    log_info "Cloning UNVT Portable repository..."
+# Create installation directories
+create_directories() {
+    log_info "Creating installation directories..."
     
     if [ -d "$INSTALL_DIR" ]; then
         log_warning "Installation directory already exists: $INSTALL_DIR"
@@ -116,76 +115,162 @@ clone_repository() {
         fi
     fi
     
-    git clone "$UNVT_REPO" "$INSTALL_DIR"
-    log_success "Repository cloned to $INSTALL_DIR"
+    mkdir -p "$INSTALL_DIR"
+    mkdir -p "$DATA_DIR"
+    
+    log_success "Directories created at $INSTALL_DIR"
 }
 
-# Setup Node.js dependencies
-setup_nodejs() {
-    log_info "Setting up Node.js dependencies..."
+# Install Caddy
+install_caddy() {
+    log_info "Installing Caddy web server..."
     
-    if [ ! -d "$INSTALL_DIR" ]; then
-        log_error "Installation directory does not exist: $INSTALL_DIR"
-        return 1
-    fi
+    # Add Caddy repository
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
     
-    (
-        cd "$INSTALL_DIR" || exit 1
-        
-        if [ -f "package.json" ]; then
-            npm install --silent
-            log_success "Node.js dependencies installed"
-        else
-            log_warning "No package.json found. Skipping Node.js setup."
-        fi
-    )
+    # Update and install Caddy
+    apt-get update -qq
+    apt-get install -y -qq caddy
+    
+    log_success "Caddy installed successfully"
 }
 
-# Setup Python dependencies
-setup_python() {
-    log_info "Setting up Python dependencies..."
+# Install Martin
+install_martin() {
+    log_info "Installing Martin tile server..."
     
-    if [ ! -d "$INSTALL_DIR" ]; then
-        log_error "Installation directory does not exist: $INSTALL_DIR"
-        return 1
-    fi
+    # Detect architecture
+    ARCH=$(dpkg --print-architecture)
     
-    (
-        cd "$INSTALL_DIR" || exit 1
-        
-        if [ -f "requirements.txt" ]; then
-            pip3 install --quiet -r requirements.txt
-            log_success "Python dependencies installed"
-        else
-            log_warning "No requirements.txt found. Skipping Python setup."
-        fi
-    )
-}
-
-# Configure Apache
-configure_apache() {
-    log_info "Configuring Apache web server..."
-    
-    # Enable required Apache modules
-    for module in rewrite headers ssl; do
-        if ! a2enmod "$module" 2>/dev/null; then
-            log_warning "Failed to enable Apache module: $module"
-        fi
-    done
-    
-    # Set proper permissions for web root
-    if [ -d "$WEB_ROOT" ]; then
-        chown -R "$APACHE_USER:$APACHE_USER" "$WEB_ROOT"
-        chmod -R 755 "$WEB_ROOT"
+    # Download Martin binary based on architecture
+    if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
+        MARTIN_URL="https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-aarch64-unknown-linux-gnu.tar.gz"
+    elif [ "$ARCH" = "armhf" ] || [ "$ARCH" = "armv7l" ]; then
+        MARTIN_URL="https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-armv7-unknown-linux-gnueabihf.tar.gz"
+    elif [ "$ARCH" = "amd64" ] || [ "$ARCH" = "x86_64" ]; then
+        MARTIN_URL="https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
     else
-        log_warning "Web root directory does not exist: $WEB_ROOT"
+        log_error "Unsupported architecture: $ARCH"
+        exit 1
     fi
     
-    # Restart Apache
-    systemctl restart apache2
-    systemctl enable apache2
+    # Download and extract Martin
+    wget -q -O /tmp/martin.tar.gz "$MARTIN_URL"
+    tar -xzf /tmp/martin.tar.gz -C /tmp/
+    mv /tmp/martin /usr/local/bin/martin
+    chmod +x /usr/local/bin/martin
+    rm /tmp/martin.tar.gz
     
-    log_success "Apache configured and started"
+    log_success "Martin installed successfully"
+}
+
+# Configure Martin
+configure_martin() {
+    log_info "Configuring Martin tile server..."
+    
+    # Create martin.yml configuration
+    cat > "$INSTALL_DIR/martin.yml" << 'EOF'
+pmtiles:
+  paths:
+    - /opt/unvt-portable/data
+web_ui: enable-for-all
+listen_addresses: "127.0.0.1:3000"
+cors: false
+EOF
+    
+    # Create systemd service for Martin
+    cat > /etc/systemd/system/martin.service << EOF
+[Unit]
+Description=Martin Tile Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$INSTALL_DIR
+ExecStart=/usr/local/bin/martin --config $INSTALL_DIR/martin.yml
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    # Enable and start Martin service
+    systemctl daemon-reload
+    systemctl enable martin
+    systemctl start martin
+    
+    log_success "Martin configured and started"
+}
+
+# Configure Caddy
+configure_caddy() {
+    log_info "Configuring Caddy web server..."
+    
+    # Create Caddyfile
+    cat > "$INSTALL_DIR/Caddyfile" << 'EOF'
+:8080 {
+    # Serve static files from the data folder
+    root * /opt/unvt-portable/data
+    file_server
+
+    # Add CORS headers to all responses
+    header Access-Control-Allow-Origin "*"
+    header Access-Control-Allow-Methods "GET, POST, OPTIONS"
+    header Access-Control-Allow-Headers "*"
+
+    # Reverse-proxy requests to martin
+    handle_path /martin/* {
+        # Handle OPTIONS preflight requests for martin paths
+        @martin_preflight method OPTIONS
+        handle @martin_preflight {
+            header Access-Control-Allow-Origin "*"
+            header Access-Control-Allow-Methods "GET, POST, OPTIONS"
+            header Access-Control-Allow-Headers "*"
+            header Access-Control-Max-Age "86400"
+            respond 204
+        }
+        
+        uri strip_prefix /martin
+        reverse_proxy localhost:3000 {
+            header_up X-Forwarded-Proto "http"
+            header_up X-Forwarded-Host {host}
+            header_up X-Forwarded-Port "8080"
+        }
+    }
+}
+EOF
+    
+    # Create systemd service for Caddy with custom Caddyfile
+    cat > /etc/systemd/system/caddy-niroku.service << EOF
+[Unit]
+Description=Caddy Web Server for UNVT Portable
+After=network.target martin.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$INSTALL_DIR
+ExecStart=/usr/bin/caddy run --config $INSTALL_DIR/Caddyfile
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    # Stop default Caddy if running
+    systemctl stop caddy 2>/dev/null || true
+    systemctl disable caddy 2>/dev/null || true
+    
+    # Enable and start Caddy-niroku service
+    systemctl daemon-reload
+    systemctl enable caddy-niroku
+    systemctl start caddy-niroku
+    
+    log_success "Caddy configured and started"
 }
 
 # Setup WiFi Access Point (optional)
@@ -209,10 +294,16 @@ display_summary() {
     echo "=========================================="
     echo ""
     log_info "Installation directory: $INSTALL_DIR"
-    log_info "Web root: $WEB_ROOT"
+    log_info "Data directory: $DATA_DIR"
+    log_info "Configuration: $INSTALL_DIR/martin.yml"
+    log_info "Caddy config: $INSTALL_DIR/Caddyfile"
+    echo ""
+    log_info "Service Status:"
+    echo "  - Martin: $(systemctl is-active martin)"
+    echo "  - Caddy: $(systemctl is-active caddy-niroku)"
     echo ""
     log_info "Next steps:"
-    echo "  1. Configure your map data in $WEB_ROOT"
+    echo "  1. Place your PMTiles files in $DATA_DIR"
     
     # Get primary IP address with better error handling
     # Try multiple methods to get the primary IP
@@ -225,15 +316,28 @@ display_summary() {
     fi
     
     if [ -n "$PRIMARY_IP" ] && [ "$PRIMARY_IP" != "127.0.0.1" ]; then
-        echo "  2. Access the web interface at http://localhost or http://$PRIMARY_IP"
+        echo "  2. Access the web interface at:"
+        echo "     - http://localhost:8080"
+        echo "     - http://$PRIMARY_IP:8080"
+        echo "  3. Access Martin tile server at:"
+        echo "     - http://localhost:8080/martin"
+        echo "     - http://$PRIMARY_IP:8080/martin"
     else
-        echo "  2. Access the web interface at http://localhost"
+        echo "  2. Access the web interface at http://localhost:8080"
+        echo "  3. Access Martin tile server at http://localhost:8080/martin"
     fi
     
-    echo "  3. Refer to the manual: https://github.com/unvt/portable/wiki"
     echo "  4. For WiFi AP setup, see: https://github.com/unvt/portable/wiki"
     echo ""
-    log_info "Apache status: $(systemctl is-active apache2)"
+    log_info "Useful commands:"
+    echo "  - Check Martin logs: journalctl -u martin -f"
+    echo "  - Check Caddy logs: journalctl -u caddy-niroku -f"
+    echo "  - Restart services: systemctl restart martin caddy-niroku"
+    echo ""
+    log_info "For more information, see:"
+    echo "  - https://github.com/unvt/x-24b (reference architecture)"
+    echo "  - https://martin.maplibre.org/ (Martin documentation)"
+    echo "  - https://caddyserver.com/docs/ (Caddy documentation)"
     echo ""
 }
 
@@ -243,16 +347,18 @@ main() {
     echo "  niroku - JUMP26 Installer"
     echo "  JICA UNVT Module Portable 26"
     echo "  for Raspberry Pi OS (trixie)"
+    echo "  Using Caddy + Martin Architecture"
     echo "=========================================="
     echo ""
     
     check_system
     update_system
     install_dependencies
-    clone_repository
-    setup_nodejs
-    setup_python
-    configure_apache
+    create_directories
+    install_caddy
+    install_martin
+    configure_martin
+    configure_caddy
     setup_wifi_ap
     generate_qr_codes
     display_summary

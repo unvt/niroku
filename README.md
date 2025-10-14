@@ -4,7 +4,19 @@
 
 ## Overview
 
-**niroku** is a streamlined installer script that helps you quickly set up **JUMP26** (JICA UNVT Module Portable 26) on Raspberry Pi OS (trixie). It automates the installation of [UNVT Portable](https://github.com/unvt/portable), an offline local web map server designed for disaster response and field operations.
+**niroku** is a streamlined installer script that helps you quickly set up **JUMP26** (JICA UNVT Module Portable 26) on Raspberry Pi OS (trixie). It uses a modern architecture with **Caddy** (reverse proxy) and **Martin** (PMTiles tile server) to provide an offline local web map server designed for disaster response and field operations.
+
+### Architecture
+
+niroku follows the proven [x-24b architecture](https://github.com/unvt/x-24b):
+
+```
+Web Browser ←→ Caddy (Reverse Proxy) ←→ Martin (PMTiles Server)
+```
+
+- **Caddy**: Handles HTTP serving, CORS, and reverse proxying
+- **Martin**: Serves PMTiles vector tiles with high performance
+- **systemd services**: Both run as system services with automatic restart
 
 ## What is JUMP26?
 
@@ -63,11 +75,12 @@ sudo ./install.sh
 The niroku installer will:
 
 1. ✅ Update system packages
-2. ✅ Install dependencies (Apache, Node.js, Python, git, etc.)
-3. ✅ Clone the UNVT Portable repository to `/opt/unvt-portable`
-4. ✅ Set up Node.js and Python dependencies
-5. ✅ Configure Apache web server
-6. ✅ Install tools for WiFi AP and QR code generation
+2. ✅ Install dependencies (git, curl, wget, etc.)
+3. ✅ Install **Caddy** web server (reverse proxy)
+4. ✅ Install **Martin** tile server (PMTiles hosting)
+5. ✅ Create installation directory at `/opt/unvt-portable`
+6. ✅ Configure both services to run automatically at boot
+7. ✅ Install tools for WiFi AP and QR code generation
 
 ## Post-Installation Steps
 
@@ -79,14 +92,31 @@ After installation completes:
    hostname -I
    
    # Access via web browser at:
-   # http://[YOUR_IP_ADDRESS]
+   # http://[YOUR_IP_ADDRESS]:8080
+   # Martin tile server at:
+   # http://[YOUR_IP_ADDRESS]:8080/martin
    ```
 
 2. **Add your map data**:
-   - Place tile data in `/var/www/html`
-   - Follow the [UNVT Portable documentation](https://github.com/unvt/portable/wiki)
+   - Place PMTiles files in `/opt/unvt-portable/data`
+   - Martin will automatically detect and serve them
+   - Access tiles at: `http://[YOUR_IP]:8080/martin/[filename]/{z}/{x}/{y}`
 
-3. **Configure WiFi Access Point** (optional):
+3. **Manage services**:
+   ```bash
+   # Check service status
+   systemctl status martin
+   systemctl status caddy-niroku
+   
+   # View logs
+   journalctl -u martin -f
+   journalctl -u caddy-niroku -f
+   
+   # Restart services
+   systemctl restart martin caddy-niroku
+   ```
+
+4. **Configure WiFi Access Point** (optional):
    - Refer to the [UNVT Portable WiFi setup guide](https://github.com/unvt/portable/wiki)
    - Generate QR codes using the installed `qrencode` tool
 
@@ -119,22 +149,42 @@ After installation completes:
 sudo ./install.sh
 ```
 
-### Apache doesn't start
+### Services don't start
 ```bash
-# Check Apache status
-sudo systemctl status apache2
+# Check Martin status
+sudo systemctl status martin
+
+# Check Caddy status
+sudo systemctl status caddy-niroku
 
 # View logs
-sudo journalctl -u apache2 -n 50
+sudo journalctl -u martin -n 50
+sudo journalctl -u caddy-niroku -n 50
 ```
 
-### Port 80 already in use
+### Port 8080 already in use
 ```bash
-# Check what's using port 80
-sudo lsof -i :80
+# Check what's using port 8080
+sudo lsof -i :8080
 
 # Stop conflicting service if needed
 sudo systemctl stop [service-name]
+
+# Or edit the Caddyfile to use a different port
+sudo nano /opt/unvt-portable/Caddyfile
+sudo systemctl restart caddy-niroku
+```
+
+### Martin can't find PMTiles files
+```bash
+# Ensure files are in the correct directory
+ls -la /opt/unvt-portable/data/
+
+# Check file permissions
+sudo chmod 644 /opt/unvt-portable/data/*.pmtiles
+
+# Restart Martin
+sudo systemctl restart martin
 ```
 
 ## Development and Contributing
@@ -147,10 +197,13 @@ This project is part of the [UNVT (United Nations Vector Tile Toolkit)](https://
 
 ## Related Projects
 
+- [unvt/x-24b](https://github.com/unvt/x-24b) - Reference architecture for Caddy + Martin setup
 - [unvt/portable](https://github.com/unvt/portable) - Main UNVT Portable repository
 - [unvt/portable-j-22](https://github.com/unvt/portable-j-22) - JICA 2022 version
 - [unvt/kagero](https://github.com/unvt/kagero) - Power monitoring tool
 - [unvt/yata](https://github.com/unvt/yata) - Solar power supply
+- [Martin](https://martin.maplibre.org/) - Blazing fast and lightweight tile server
+- [Caddy](https://caddyserver.com/) - Fast and extensible multi-platform web server
 
 ## License
 
