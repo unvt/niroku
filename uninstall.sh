@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 INSTALL_DIR="/opt/unvt-portable"
 
 # Package lists
-SIMPLE_PACKAGES=(aria2 btop gdal-bin jq ruby tmux vim)
+SIMPLE_PACKAGES=(aria2 btop gdal-bin git jq ruby tmux vim)
 COMPREHENSIVE_PACKAGES=(apache2 nodejs npm python3-pip hostapd dnsmasq qrencode)
 
 # Logging functions
