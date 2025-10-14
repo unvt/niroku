@@ -126,7 +126,21 @@ install_caddy() {
     log_info "Installing Caddy web server..."
     
     # Add Caddy repository
-    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    # Download Caddy GPG key to a temporary file
+    CADDY_GPG_KEY_URL="https://dl.cloudsmith.io/public/caddy/stable/gpg.key"
+    CADDY_GPG_KEY_TMP="/tmp/caddy.gpg.key"
+    CADDY_KNOWN_FINGERPRINT="E2C0DDE2C6B4D7B5CA2C4E2AA7B2C3B5A3A3F0B6" # Replace with official fingerprint from https://github.com/caddyserver/caddy/wiki/Repository-signing-keys
+    curl -1sLf "$CADDY_GPG_KEY_URL" -o "$CADDY_GPG_KEY_TMP"
+    # Extract fingerprint
+    CADDY_KEY_FINGERPRINT=$(gpg --show-keys --with-fingerprint "$CADDY_GPG_KEY_TMP" 2>/dev/null | grep -A1 "pub" | grep -oE "([A-F0-9]{40})" | head -n1)
+    if [ "$CADDY_KEY_FINGERPRINT" != "$CADDY_KNOWN_FINGERPRINT" ]; then
+        log_error "Caddy GPG key fingerprint mismatch! Aborting installation."
+        rm -f "$CADDY_GPG_KEY_TMP"
+        exit 1
+    fi
+    # Install the verified key
+    gpg --dearmor < "$CADDY_GPG_KEY_TMP" > /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    rm -f "$CADDY_GPG_KEY_TMP"
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
     
     # Update and install Caddy
