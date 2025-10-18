@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# niroku - Uninstaller for JUMP26 installations
+# niroku - Uninstaller
 # This script removes installations made by install.sh
 
 # Colors for output
@@ -20,6 +20,18 @@ BASE_PACKAGES=(aria2 btop gdal-bin jq ruby tmux vim)
 # Additional packages for Caddy + Martin setup
 # Note: Caddy and Martin are handled separately as they have their own services
 COMPREHENSIVE_PACKAGES=(git curl wget hostapd dnsmasq qrencode debian-keyring debian-archive-keyring apt-transport-https ca-certificates)
+
+# Node.js uninstall support (NodeSource repo cleanup)
+NODESOURCE_LIST="/etc/apt/sources.list.d/nodesource.list"
+NODESOURCE_KEYRING="/usr/share/keyrings/nodesource.gpg"
+
+# Docker uninstall support
+DOCKER_LIST="/etc/apt/sources.list.d/docker.list"
+DOCKER_KEYRING="/etc/apt/keyrings/docker.gpg"
+
+# cloudflared uninstall support
+CLOUDFLARED_LIST="/etc/apt/sources.list.d/cloudflared.list"
+CLOUDFLARED_KEYRING="/etc/apt/keyrings/cloudflare-main.gpg"
 
 # Logging functions
 log_info() {
@@ -49,7 +61,7 @@ check_root() {
 # Confirm uninstallation
 confirm_uninstall() {
     echo "=== niroku uninstaller ==="
-    echo "This will remove JUMP26 (Caddy + Martin) installations made by install.sh"
+    echo "This will remove niroku (Caddy + Martin) installations made by install.sh"
     echo ""
     
     # Check what will be removed
@@ -244,6 +256,29 @@ remove_optional_packages() {
     log_success "Cleanup complete"
 }
 
+# Remove Node.js (NodeSource) and global Vite
+remove_node_and_vite() {
+    log_info "Checking Node.js and Vite..."
+    if dpkg -l | grep -q "^ii  nodejs "; then
+        log_info "Purging nodejs..."
+        apt-get purge -y nodejs >/dev/null 2>&1 || true
+    fi
+    # Remove NodeSource repo files if present
+    if [ -f "$NODESOURCE_LIST" ]; then
+        log_info "Removing NodeSource repository configuration..."
+        rm -f "$NODESOURCE_LIST" || true
+    fi
+    if [ -f "$NODESOURCE_KEYRING" ]; then
+        rm -f "$NODESOURCE_KEYRING" || true
+    fi
+    # Attempt to remove global vite if npm still available
+    if command -v npm >/dev/null 2>&1; then
+        npm uninstall -g vite >/dev/null 2>&1 || true
+    fi
+    apt-get update -qq || true
+    log_success "Node.js/Vite cleanup complete"
+}
+
 # Display uninstallation summary
 display_summary() {
     echo ""
@@ -251,7 +286,7 @@ display_summary() {
     log_success "Uninstallation complete!"
     echo "=========================================="
     echo ""
-    log_info "niroku (JUMP26) has been removed from your system."
+    log_info "niroku has been removed from your system."
     echo ""
 }
 
@@ -270,6 +305,118 @@ main() {
     remove_unvt_portable
     remove_base_packages
     remove_optional_packages
+    remove_node_and_vite
+    
+    # Uninstall Docker Engine and cleanup repository
+    log_info "Checking Docker installation..."
+    if systemctl is-active docker >/dev/null 2>&1; then
+        log_info "Stopping Docker..."
+        systemctl stop docker || true
+    fi
+    if systemctl is-enabled docker >/dev/null 2>&1; then
+        systemctl disable docker || true
+    fi
+    # Purge Docker packages if installed
+    DOCKER_PKGS=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
+    TO_PURGE=()
+    for p in "${DOCKER_PKGS[@]}"; do
+        if dpkg -l | grep -q "^ii  ${p} "; then
+            TO_PURGE+=("$p")
+        fi
+    done
+    if [ ${#TO_PURGE[@]} -gt 0 ]; then
+        log_info "Purging Docker packages: ${TO_PURGE[*]}"
+        apt-get purge -y "${TO_PURGE[@]}" || true
+    else
+        log_info "No Docker packages to purge"
+    fi
+    # Remove Docker repo and keyring
+    if [ -f "$DOCKER_LIST" ]; then
+        rm -f "$DOCKER_LIST" || true
+    fi
+    if [ -f "$DOCKER_KEYRING" ]; then
+        rm -f "$DOCKER_KEYRING" || true
+    fi
+    apt-get update -qq || true
+    
+    # Optional data cleanup
+    if [ -t 0 ] && [ -d "/var/lib/docker" ]; then
+        echo ""
+        log_warning "Docker data directory /var/lib/docker exists."
+        read -p "Remove /var/lib/docker and /var/lib/containerd? (y/N) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            rm -rf /var/lib/docker /var/lib/containerd || true
+            log_success "Docker data directories removed"
+        else
+            log_info "Keeping Docker data directories"
+        fi
+    fi
+    
+    # Uninstall cloudflared and cleanup repository
+    log_info "Checking cloudflared installation..."
+    # Stop possible service if exists
+    if systemctl list-units --type=service --all | grep -q "cloudflared"; then
+        systemctl stop cloudflared 2>/dev/null || true
+        systemctl disable cloudflared 2>/dev/null || true
+    fi
+    if dpkg -l | grep -q "^ii  cloudflared "; then
+        log_info "Purging cloudflared..."
+        apt-get purge -y cloudflared || true
+    fi
+    if [ -f "$CLOUDFLARED_LIST" ]; then
+        rm -f "$CLOUDFLARED_LIST" || true
+    fi
+    if [ -f "$CLOUDFLARED_KEYRING" ]; then
+        rm -f "$CLOUDFLARED_KEYRING" || true
+    fi
+    apt-get update -qq || true
+    
+    # Remove tippecanoe (package or binaries)
+    if dpkg -l | grep -q "^ii  tippecanoe "; then
+        log_info "Purging tippecanoe package..."
+        apt-get purge -y tippecanoe || true
+    else
+        # If installed from source, binaries are in /usr/local/bin
+        for bin in tippecanoe tile-join tippecanoe-enumerate; do
+            if [ -f "/usr/local/bin/$bin" ]; then
+                rm -f "/usr/local/bin/$bin" || true
+                log_info "Removed /usr/local/bin/$bin"
+            fi
+        done
+    fi
+    
+    # Remove go-pmtiles CLI
+    if [ -f "/usr/local/bin/pmtiles" ]; then
+        rm -f /usr/local/bin/pmtiles || true
+        log_info "Removed /usr/local/bin/pmtiles"
+    fi
+    
+    # Optionally restore tmpfs on /tmp (symmetry with install.sh)
+    if [ -t 0 ]; then
+        echo ""
+        log_warning "Optionally restore default tmpfs on /tmp (systemctl unmask tmp.mount)."
+        read -p "Restore tmpfs on /tmp? (y/N) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            log_info "Restoring tmpfs on /tmp..."
+            systemctl unmask tmp.mount || true
+            # Try to start the mount unit immediately; may require reboot on some systems
+            if systemctl start tmp.mount 2>/dev/null; then
+                log_success "/tmp tmpfs mount started."
+            else
+                log_warning "Could not start tmp.mount now. It should mount on next boot."
+            fi
+            # Ensure sticky bit permissions remain correct
+            if [ -d /tmp ]; then
+                chmod 1777 /tmp || true
+            fi
+        else
+            log_info "Keeping current /tmp mount configuration."
+        fi
+    else
+        log_info "Non-interactive mode: not changing /tmp mount configuration."
+    fi
     
     display_summary
 }

@@ -1,10 +1,10 @@
 # niroku
 
-**niroku** — a pipe‑to‑shell installer to quickly install JUMP26 on Raspberry Pi OS (trixie)
+**niroku** — a new implementation of UNVT Portable with JICA, for 2026 (Raspberry Pi OS trixie)
 
 ## Overview
 
-**niroku** is a streamlined installer script that helps you quickly set up **JUMP26** (JICA UNVT Module Portable 26) on Raspberry Pi OS (trixie). It uses a modern architecture with **Caddy** (reverse proxy) and **Martin** (PMTiles tile server) to provide an offline local web map server designed for disaster response and field operations.
+**niroku** is a new implementation of UNVT Portable. It is co‑developed with JICA and targeted for 2026 use. niroku sets up an offline local web map server on Raspberry Pi OS (trixie). It uses **Caddy** (reverse proxy) and **Martin** (PMTiles tile server). It is designed for field operations where power and connectivity can be unstable.
 
 ### Architecture
 
@@ -18,21 +18,27 @@ Web Browser ←→ Caddy (Reverse Proxy) ←→ Martin (PMTiles Server)
 - **Martin**: Serves PMTiles vector tiles with high performance
 - **systemd services**: Both run as system services with automatic restart
 
-## What is JUMP26?
+## What is niroku?
 
-JUMP26 (JICA UNVT Module Portable 26) is a version of UNVT Portable configured for JICA (Japan International Cooperation Agency) programs. It provides:
+niroku is the next iteration of UNVT Portable. Compared to earlier versions, it:
 
-- **Offline web map server** running on Raspberry Pi
+- Focuses on a simpler, auditable install process
+- Adds practical tools (Node.js+Vite, Docker, cloudflared, tippecanoe, go‑pmtiles)
+- Improves defaults for Raspberry Pi OS trixie (e.g., /tmp tmpfs handling)
+- Keeps architecture minimal: **Caddy** + **Martin**
+
+What you get:
+
+- **Local web map server** running on Raspberry Pi
 - **Local network access** to geospatial data without internet
-- **QR code based WiFi connection** for easy access
-- **Integration** of OpenStreetMap, aerial imagery, and custom map data
-- **Disaster response** capabilities for municipal operations
+- **Simple setup** using one script
+- **Caddy + Martin** based architecture
 
 ## Quick Installation
 
 ### One-line Install (Pipe to Shell)
 
-The simplest way to install JUMP26:
+The simplest way to install niroku:
 
 ```bash
 curl -fsSL https://unvt.github.io/niroku/install.sh | sudo -E bash -
@@ -88,6 +94,7 @@ The niroku installer will:
 After installation completes:
 
 1. **Access the web interface**:
+   
    ```bash
    # Find your Raspberry Pi's IP address
    hostname -I
@@ -104,6 +111,7 @@ After installation completes:
    - Access tiles at: `http://[YOUR_IP]:8080/martin/[filename]/{z}/{x}/{y}`
 
 3. **Manage services**:
+   
    ```bash
    # Check service status
    systemctl status martin
@@ -133,24 +141,23 @@ After installation completes:
 
 - **Review before running**: We encourage reviewing the script before execution
 - **Run with sudo**: Required for system-level changes
-- **Local network only**: By default, UNVT Portable is designed for local network access
+- **Local network only**: By default, niroku is designed for local network access
 
-## Manual and Documentation
+## Documentation
 
-- **UNVT Portable Wiki**: https://github.com/unvt/portable/wiki
-- **Original Repository**: https://github.com/unvt/portable
-- **Manual (Google Slides)**: [UNVT Portable Manual](https://docs.google.com/presentation/d/1SuDCDUfLHZ2Xw1SdpUIillYWJekY0L4TqS7-X4sDZqg/edit?usp=sharing)
-- **Video Tutorial**: [YouTube - UNVT Portable Installation](https://youtube.com/shorts/XUsOE_sISLM)
+- UNVT Portable Wiki: <https://github.com/unvt/portable/wiki>
 
 ## Troubleshooting
 
 ### Installation fails with permission errors
+
 ```bash
 # Ensure you're using sudo
 sudo ./install.sh
 ```
 
 ### Services don't start
+
 ```bash
 # Check Martin status
 sudo systemctl status martin
@@ -164,6 +171,7 @@ sudo journalctl -u caddy-niroku -n 50
 ```
 
 ### Port 8080 already in use
+
 ```bash
 # Check what's using port 8080
 sudo lsof -i :8080
@@ -177,6 +185,7 @@ sudo systemctl restart caddy-niroku
 ```
 
 ### Martin can't find PMTiles files
+
 ```bash
 # Ensure files are in the correct directory
 ls -la /opt/unvt-portable/data/
@@ -217,6 +226,7 @@ sudo ./uninstall.sh
 ### What Gets Removed
 
 The uninstaller will:
+
 1. Stop and remove Martin tile server service
 2. Stop and remove Caddy-niroku web server service
 3. Remove Martin binary from `/usr/local/bin/martin`
@@ -232,8 +242,8 @@ The script will ask for confirmation before removing anything and show you exact
 
 This project is part of the [UNVT (United Nations Vector Tile Toolkit)](https://github.com/unvt) ecosystem.
 
-- **Repository**: https://github.com/unvt/niroku
-- **Issues**: https://github.com/unvt/niroku/issues
+- Repository: <https://github.com/unvt/niroku>
+- Issues: <https://github.com/unvt/niroku/issues>
 - **License**: CC0 1.0 Universal (Public Domain)
 
 ## Related Projects
