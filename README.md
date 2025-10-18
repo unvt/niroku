@@ -80,14 +80,21 @@ sudo ./install.sh
 
 The niroku installer will:
 
-1. ✅ Update system packages
-2. ✅ Install **base tools**: `aria2`, `btop`, `gdal-bin`, `git`, `jq`, `ruby`, `tmux`, `vim`
-3. ✅ Install **dependencies**: `curl`, `wget`, `hostapd`, `dnsmasq`, `qrencode`, and related packages
-4. ✅ Install **Caddy** web server (reverse proxy)
-5. ✅ Install **Martin** tile server (PMTiles hosting)
-6. ✅ Create installation directory at `/opt/unvt-portable`
-7. ✅ Configure both Caddy and Martin as systemd services to run automatically at boot
-8. ✅ Set up configuration files (`martin.yml` and `Caddyfile`)
+1. ✅ **Update system packages** and clean up legacy repositories
+2. ✅ **Install base tools**: `aria2`, `btop`, `gdal-bin`, `git`, `jq`, `ruby`, `tmux`, `vim`
+3. ✅ **Install dependencies**: `curl`, `wget`, `hostapd`, `dnsmasq`, `qrencode`, build tools, and related packages
+4. ✅ **Install Caddy** web server (v2.8.4, reverse proxy with CORS support)
+5. ✅ **Install Martin** tile server (v0.19.3, PMTiles hosting with web UI)
+6. ✅ **Install Node.js LTS** (v22) via NodeSource and **Vite** globally via npm
+7. ✅ **Install Docker Engine** (CE 28.5.1) from official Docker repository
+8. ✅ **Install cloudflared** (2025.10.0) for Cloudflare Tunnel support
+9. ✅ **Install tippecanoe** (vector tile tool, from Debian repo or built from source)
+10. ✅ **Install go-pmtiles** (PMTiles CLI tool, v1.18.0)
+11. ✅ **Create installation directory** at `/opt/unvt-portable` with data subdirectory
+12. ✅ **Configure services**: Both Caddy and Martin run as systemd services with automatic restart
+13. ✅ **Set up configurations**: `martin.yml` (PMTiles paths, web UI) and `Caddyfile` (reverse proxy, CORS)
+14. ✅ **Disable /tmp tmpfs** if present (prevents RAM exhaustion on Raspberry Pi)
+15. ✅ **Generate installation log** at `/tmp/niroku_install.log` for troubleshooting
 
 ## Post-Installation Steps
 
@@ -129,6 +136,45 @@ After installation completes:
    - Refer to the [UNVT Portable WiFi setup guide](https://github.com/unvt/portable/wiki)
    - Generate QR codes using the installed `qrencode` tool
 
+5. **Use installed tools**:
+   
+   ```bash
+   # Check installed versions
+   node --version           # Node.js LTS
+   npm --version
+   vite --version
+   docker --version         # Docker Engine
+   cloudflared --version    # Cloudflare Tunnel
+   tippecanoe --version     # Vector tile tool
+   pmtiles --version        # PMTiles CLI
+   martin --version         # Tile server
+   caddy version            # Web server
+   
+   # Example: Convert GeoJSON to PMTiles
+   tippecanoe -o output.pmtiles input.geojson
+   
+   # Example: Inspect PMTiles metadata
+   pmtiles show /opt/unvt-portable/data/yourfile.pmtiles
+   ```
+
+## Environment Variables
+
+For non-interactive installations (e.g., automated deployments), you can use these environment variables:
+
+```bash
+# Skip OS compatibility check
+export NIROKU_FORCE_OS=1
+
+# Force reinstall over existing installation
+export NIROKU_FORCE_REINSTALL=1
+
+# Skip Caddy GPG fingerprint verification (not recommended for production)
+export NIROKU_SKIP_CADDY_KEY_CHECK=1
+
+# Example: Full non-interactive install
+sudo NIROKU_FORCE_OS=1 NIROKU_FORCE_REINSTALL=1 ./install.sh
+```
+
 ## Security Considerations
 
 ⚠️ **Important Security Notes**:
@@ -156,6 +202,18 @@ After installation completes:
 sudo ./install.sh
 ```
 
+### Installation log for debugging
+
+The installer creates a detailed log file for troubleshooting:
+
+```bash
+# View installation log
+sudo cat /tmp/niroku_install.log
+
+# View uninstallation log
+sudo cat /tmp/niroku_uninstall.log
+```
+
 ### Services don't start
 
 ```bash
@@ -168,6 +226,17 @@ sudo systemctl status caddy-niroku
 # View logs
 sudo journalctl -u martin -n 50
 sudo journalctl -u caddy-niroku -n 50
+```
+
+### apt-get update fails with repository errors
+
+If you see errors about missing repository files (e.g., legacy cloudflared repository), the installer will automatically clean them up. If issues persist:
+
+```bash
+# Manually remove problematic repository files
+sudo rm -f /etc/apt/sources.list.d/cloudflared.list
+sudo rm -f /etc/apt/keyrings/cloudflare-main.gpg
+sudo apt-get update
 ```
 
 ### Port 8080 already in use
@@ -195,6 +264,30 @@ sudo chmod 644 /opt/unvt-portable/data/*.pmtiles
 
 # Restart Martin
 sudo systemctl restart martin
+```
+
+### /tmp write errors during installation
+
+The installer automatically falls back to `/var/tmp` if `/tmp` is not writable. If you encounter issues:
+
+```bash
+# Check /tmp permissions
+ls -ld /tmp
+
+# Should be: drwxrwxrwt (permissions 1777)
+sudo chmod 1777 /tmp
+```
+
+### Docker installation issues
+
+If Docker fails to install or the GPG key conflicts occur:
+
+```bash
+# Remove existing Docker GPG key
+sudo rm -f /etc/apt/keyrings/docker.gpg
+
+# Re-run the installer
+sudo ./install.sh
 ```
 
 ## Uninstallation
@@ -231,10 +324,16 @@ The uninstaller will:
 2. Stop and remove Caddy-niroku web server service
 3. Remove Martin binary from `/usr/local/bin/martin`
 4. Remove Caddy package and repository configuration
-5. Remove UNVT Portable installation directory (`/opt/unvt-portable`)
-6. Remove base packages (`aria2`, `btop`, `gdal-bin`, `jq`, `ruby`, `tmux`, `vim`)
-7. Optionally remove comprehensive packages (you'll be prompted)
-8. Clean up unused dependencies
+5. Remove Node.js packages and NodeSource repository
+6. Remove Docker Engine packages and repository
+7. Remove cloudflared package
+8. Remove tippecanoe (if installed from source)
+9. Remove go-pmtiles binary from `/usr/local/bin/pmtiles`
+10. Remove UNVT Portable installation directory (`/opt/unvt-portable`)
+11. Remove base packages (`aria2`, `btop`, `gdal-bin`, `jq`, `ruby`, `tmux`, `vim`)
+12. Optionally remove comprehensive packages (you'll be prompted)
+13. Clean up unused dependencies
+14. Generate uninstallation log at `/tmp/niroku_uninstall.log`
 
 The script will ask for confirmation before removing anything and show you exactly what will be removed.
 

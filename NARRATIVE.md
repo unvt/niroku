@@ -46,8 +46,10 @@ niroku is a small installer that brings together Caddy (web server) and Martin (
 ## History (short)
 
 - 2022–2024: UNVT Portable and related tools matured in the community
-- 2025: We started niroku as a simpler, focused installer for Raspberry Pi OS
-- 2025: We adopted a security‑aware approach (verified repositories, minimal changes) and added optional tools like Docker and cloudflared
+- 2025: We started niroku as a simpler, focused installer for Raspberry Pi OS (trixie)
+- 2025: We adopted a security‑aware approach (verified repositories, minimal changes) and added practical tools like Docker, Node.js, and cloudflared
+- 2025: We enhanced reliability with robust download handling, fallback paths for temporary directories, and comprehensive logging
+- 2025: We tested end-to-end on real Raspberry Pi hardware to ensure all components work together reliably
 
 ## Principles
 
@@ -70,9 +72,12 @@ niroku provides a small, auditable installer to set up a local web map server on
 
 - Installs and configures Caddy (web server) and Martin (PMTiles server)
 - Prepares a data directory for PMTiles and static assets
-- Adds useful tools for field work: Node.js (LTS) + Vite, Docker, cloudflared, tippecanoe, go‑pmtiles
-- Adjusts Raspberry Pi OS defaults that affect reliability (e.g., /tmp tmpfs)
+- Adds useful tools for field work: Node.js (LTS v22) + Vite, Docker Engine (CE), cloudflared (Cloudflare Tunnel), tippecanoe (vector tile tool), go‑pmtiles (PMTiles CLI)
+- Adjusts Raspberry Pi OS defaults that affect reliability (e.g., /tmp tmpfs handling)
 - Runs everything as systemd services with clear logs and restart policies
+- Uses robust download mechanisms with multiple candidate URLs and fallback paths
+- Generates detailed installation logs for troubleshooting (`/tmp/niroku_install.log`)
+- Cleans up legacy repository configurations automatically
 
 The focus is reliability, clarity, and ease of review.
 
@@ -86,6 +91,8 @@ We follow a simple and transparent workflow:
 4. Write documentation in easy English for non‑native speakers
 5. Respect security: prefer verified repositories and signatures where practical
 6. Test on real Raspberry Pi devices when possible
+7. Handle errors gracefully: provide fallback paths, multiple download candidates, and clear error messages
+8. Log everything: installation and uninstallation logs help with remote troubleshooting
 
 Our companion AI helps with edits, checks, and remote tests. We do not shift blame to the AI; errors are shared and fixed together.
 
@@ -94,4 +101,17 @@ Our companion AI helps with edits, checks, and remote tests. We do not shift bla
 - We first run light, non‑destructive checks (e.g., /tmp state, apt status)
 - We then run install.sh, confirm services are active, and check logs
 - We exercise the web endpoints (Caddy and Martin) locally on the device
+- We verify all installed tools work correctly (node, docker, cloudflared, tippecanoe, pmtiles)
 - Finally, we run uninstall.sh and verify that the system returns to a clean state
+
+### Lessons learned
+
+Through real-world testing, we discovered and fixed several issues:
+
+- **Temporary directory handling**: Some Raspberry Pi setups mount /tmp as tmpfs, which can fill up quickly. We now detect this, offer to disable it, and use /var/tmp as a fallback for large downloads.
+- **Repository cleanup**: Old or incompatible apt repository configurations (e.g., cloudflared for trixie) can cause update failures. The installer now cleans these up automatically.
+- **Non-interactive installation**: GPG key operations can prompt for confirmation in non-interactive environments. We now remove existing keys before re-importing them.
+- **Download robustness**: Binary releases may be available in different variants (gnu vs musl libc). We try multiple candidate URLs and verify file sizes before proceeding.
+- **cloudflared installation**: The cloudflared apt repository does not support Debian trixie yet. We switched to downloading the official .deb package directly from GitHub releases, which is the recommended approach per Cloudflare's documentation.
+
+These improvements make niroku more reliable in real field deployments.

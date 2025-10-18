@@ -129,6 +129,13 @@ disable_tmp_tmpfs() {
 # Update system packages
 update_system() {
     log_info "Updating system packages..."
+    if [ -f /etc/apt/sources.list.d/cloudflared.list ]; then
+        log_info "Removing legacy cloudflared apt repository entry"
+        rm -f /etc/apt/sources.list.d/cloudflared.list
+    fi
+    if [ -f /etc/apt/keyrings/cloudflare-main.gpg ]; then
+        rm -f /etc/apt/keyrings/cloudflare-main.gpg
+    fi
     if ! apt-get update -qq; then
         log_warning "Failed to update system packages. Continuing anyway..."
     else
@@ -194,10 +201,11 @@ install_tippecanoe() {
 # Install Cloudflare Tunnel client (cloudflared)
 install_cloudflared() {
     log_info "Installing cloudflared (Cloudflare Tunnel client)..."
-    CLOUDFLARED_VERSION="2025.10.0"
-    CLOUDFLARED_URL="https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-arm64"
-    curl -fL -o /usr/local/bin/cloudflared "$CLOUDFLARED_URL"
-    chmod +x /usr/local/bin/cloudflared
+    CLOUDFLARED_DEB_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb"
+    CLOUDFLARED_DEB="$TMP_BASE/cloudflared.deb"
+    curl -L -o "$CLOUDFLARED_DEB" "$CLOUDFLARED_DEB_URL"
+    dpkg -i "$CLOUDFLARED_DEB"
+    rm -f "$CLOUDFLARED_DEB"
     log_success "cloudflared installed"
 }
 
@@ -206,6 +214,7 @@ install_docker() {
     log_info "Installing Docker Engine..."
     # Prereqs
     install -m 0755 -d /etc/apt/keyrings
+    rm -f /etc/apt/keyrings/docker.gpg
     curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
     chmod a+r /etc/apt/keyrings/docker.gpg
 
