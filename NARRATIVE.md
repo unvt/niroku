@@ -50,10 +50,11 @@ niroku installs web map data production tools such as tippecanoe, go-pmtiles, gd
 ## History (short)
 
 - 2022–2024: UNVT Portable and related tools matured in the community
-- 2025: We started niroku as a simpler, focused installer for Raspberry Pi OS (trixie)
-- 2025: We adopted a security‑aware approach (verified repositories, minimal changes) and added practical tools like Docker, Node.js, and cloudflared
-- 2025: We enhanced reliability with robust download handling, fallback paths for temporary directories, and comprehensive logging
-- 2025: We tested end-to-end on real Raspberry Pi hardware to ensure all components work together reliably
+- 2025 (early): We started niroku as a simpler, focused installer for Raspberry Pi OS (trixie)
+- 2025 (spring): We adopted a security‑aware approach (verified repositories, minimal changes) and added practical tools like Docker, Node.js, and cloudflared
+- 2025 (summer): We enhanced reliability with robust download handling, fallback paths for temporary directories, and comprehensive logging
+- 2025 (fall): We tested end-to-end on real Raspberry Pi hardware (Pi 4, Pi 400, Pi Zero W) to ensure all components work together reliably
+- 2025 (October): Added architecture detection for arm64/armv6l, npm package caching with @latest tags, improved GPG operations for non-interactive mode, and default overwrite installation behavior
 
 ## Principles
 
@@ -111,8 +112,12 @@ Through real-world testing, we discovered and fixed several issues:
 
 - **Temporary directory handling**: Some Raspberry Pi setups mount /tmp as tmpfs, which can fill up quickly. We now detect this, offer to disable it, and use /var/tmp as a fallback for large downloads.
 - **Repository cleanup**: Old or incompatible apt repository configurations (e.g., cloudflared for trixie) can cause update failures. The installer now cleans these up automatically.
-- **Non-interactive installation**: GPG key operations can prompt for confirmation in non-interactive environments. We now remove existing keys before re-importing them.
+- **Non-interactive installation**: GPG key operations can prompt for confirmation in non-interactive environments. We now use `gpg --batch --yes` flags to suppress prompts and remove existing keys before re-importing them.
 - **Download robustness**: Binary releases may be available in different variants (gnu vs musl libc). We try multiple candidate URLs and verify file sizes before proceeding.
 - **cloudflared installation**: The cloudflared apt repository does not support Debian trixie yet. We switched to downloading the official .deb package directly from GitHub releases, which is the recommended approach per Cloudflare's documentation.
+- **Architecture detection**: Raspberry Pi Zero W (armv6l) requires different handling than Pi 4 (arm64). Martin and Docker are not available as prebuilt binaries for armv6l. We detect the architecture and skip incompatible components with clear warnings.
+- **npm package versioning**: Using `npm install -g package` without version tags can install old cached versions. We now explicitly use `@latest` tags (`vite@latest`, `maplibre-gl@latest`, `pmtiles@latest`) and pre-uninstall old versions before reinstalling.
+- **Installation defaults**: Requiring environment variables to overwrite existing installations was counterintuitive for testing. We inverted the logic: default to overwrite, use `NIROKU_KEEP_EXISTING=1` to preserve existing files.
+- **Building on low-power devices**: Pi Zero W has limited RAM and slow CPU. Building Martin from source requires disabling /tmp tmpfs (to avoid "No space left" errors) and using `--jobs 1` to limit memory usage. Build time: 4-6 hours.
 
-These improvements make niroku more reliable in real field deployments.
+These improvements make niroku more reliable in real field deployments across different Raspberry Pi models.

@@ -72,11 +72,22 @@ sudo ./install.sh
 
 ## System Requirements
 
-- **Hardware**: Raspberry Pi 4 or later (recommended)
+- **Hardware**:
+  - Raspberry Pi 4 or later (recommended, full feature support)
+  - Raspberry Pi Zero W (supported, Martin requires source build)
+- **Architecture**: arm64/aarch64, armv6l (32-bit)
 - **OS**: Raspberry Pi OS (Debian trixie or compatible)
 - **Storage**: Minimum 16GB microSD card (128GB+ recommended for map data)
 - **Network**: Ethernet or WiFi connectivity for initial setup
 - **Permissions**: Root/sudo access required
+
+### Architecture-Specific Notes
+
+- **Raspberry Pi 4/400 (arm64)**: Full support with prebuilt binaries for all components
+- **Raspberry Pi Zero W (armv6l)**:
+  - Martin tile server not available as prebuilt binary (requires source build with Rust)
+  - Docker CE not officially supported (alternative container runtimes may work)
+  - All other components install normally
 
 ## What Gets Installed
 
@@ -85,18 +96,19 @@ The niroku installer will:
 1. ✅ **Update system packages** and clean up legacy repositories
 2. ✅ **Install base tools**: `aria2`, `btop`, `gdal-bin`, `git`, `jq`, `ruby`, `tmux`, `vim`
 3. ✅ **Install dependencies**: `curl`, `wget`, `hostapd`, `dnsmasq`, `qrencode`, build tools, and related packages
-4. ✅ **Install Caddy** web server (v2.8.4, reverse proxy with CORS support)
-5. ✅ **Install Martin** tile server (v0.19.3, PMTiles hosting with web UI)
-6. ✅ **Install Node.js LTS** (v22) via NodeSource and **Vite** globally via npm
-7. ✅ **Install Docker Engine** (CE 28.5.1) from official Docker repository
-8. ✅ **Install cloudflared** (2025.10.0) for Cloudflare Tunnel support
-9. ✅ **Install tippecanoe** (vector tile tool, from Debian repo or built from source)
-10. ✅ **Install go-pmtiles** (PMTiles CLI tool, v1.18.0)
-11. ✅ **Create installation directory** at `/opt/niroku` with data subdirectory
-12. ✅ **Configure services**: Both Caddy and Martin run as systemd services with automatic restart
-13. ✅ **Set up configurations**: `martin.yml` (PMTiles paths, web UI) and `Caddyfile` (reverse proxy, CORS)
-14. ✅ **Disable /tmp tmpfs** if present (prevents RAM exhaustion on Raspberry Pi)
-15. ✅ **Generate installation log** at `/tmp/niroku_install.log` for troubleshooting
+4. ✅ **Detect architecture** and set compatibility flags for arm64/armv6l
+5. ✅ **Install Caddy** web server (v2.10.2, reverse proxy with CORS support)
+6. ✅ **Install Martin** tile server (v0.19.3, PMTiles hosting with web UI, skipped on armv6l)
+7. ✅ **Install Node.js LTS** (v22) via NodeSource and **npm packages** (`vite@latest`, `maplibre-gl@latest`, `pmtiles@latest`)
+8. ✅ **Install Docker Engine** (CE 28.5.1) from official Docker repository (skipped on armv6l)
+9. ✅ **Install cloudflared** (2025.10.0) for Cloudflare Tunnel support
+10. ✅ **Install tippecanoe** (vector tile tool, from Debian repo or built from source)
+11. ✅ **Install go-pmtiles** (PMTiles CLI tool, v1.18.0)
+12. ✅ **Create installation directory** at `/opt/niroku` with data subdirectory
+13. ✅ **Configure services**: Both Caddy and Martin run as systemd services with automatic restart
+14. ✅ **Set up configurations**: `martin.yml` (PMTiles paths, web UI) and `Caddyfile` (reverse proxy, CORS)
+15. ✅ **Disable /tmp tmpfs** if present (prevents RAM exhaustion on Raspberry Pi)
+16. ✅ **Generate installation log** at `/tmp/niroku_install.log` for troubleshooting
 
 ## Post-Installation Steps
 
@@ -239,6 +251,35 @@ If you see errors about missing repository files (e.g., legacy cloudflared repos
 sudo rm -f /etc/apt/sources.list.d/cloudflared.list
 sudo rm -f /etc/apt/keyrings/cloudflare-main.gpg
 sudo apt-get update
+```
+
+### Building Martin on Raspberry Pi Zero (armv6l)
+
+Martin does not provide prebuilt binaries for armv6l architecture (Raspberry Pi Zero W). If you need Martin on Pi Zero, you must build it from source:
+
+```bash
+# Prerequisites: Rust toolchain and build dependencies
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source ~/.cargo/env
+
+# Install build dependencies
+sudo apt-get install -y cmake protobuf-compiler libsqlite3-dev libssl-dev build-essential
+
+# Disable /tmp tmpfs to avoid "No space left" errors
+sudo systemctl mask tmp.mount
+sudo reboot
+
+# Build Martin (takes several hours on Pi Zero)
+cargo install martin --locked --jobs 1
+
+# Install the binary
+sudo install -m 0755 ~/.cargo/bin/martin /usr/local/bin/martin
+
+# Verify installation
+martin --version
+```
+
+**Note**: Building Martin on Pi Zero W with `--jobs 1` can take 4-6 hours. Consider building on a faster machine with cross-compilation, or use Pi Zero for Caddy-only setups.
 
 ## Offline npm caching
 
@@ -270,7 +311,6 @@ expect -c 'set timeout 1200; spawn ssh -o StrictHostKeyChecking=accept-new -o Co
 ```
 
 Use these only for temporary testing harnesses. Do not hard-code credentials or expose them in production documentation.
-```
 
 ### Port 8080 already in use
 
