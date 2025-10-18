@@ -8,34 +8,6 @@
 
 **niroku** is a new implementation of UNVT Portable. It is co‑developed with JICA Quick Mapping Project and targeted for 2026 use. niroku sets up an offline local web map server on Raspberry Pi OS (trixie). It uses **Caddy** (reverse proxy) and **Martin** (PMTiles tile server). It is designed for field operations where power and connectivity can be unstable.
 
-### Architecture
-
-niroku follows the proven [x-24b architecture](https://github.com/unvt/x-24b):
-
-```
-Web Browser ←→ Caddy (Reverse Proxy) ←→ Martin (PMTiles Server)
-```
-
-- **Caddy**: Handles HTTP serving, CORS, and reverse proxying
-- **Martin**: Serves PMTiles vector tiles with high performance
-- **systemd services**: Both run as system services with automatic restart
-
-## What is niroku?
-
-niroku is the next iteration of UNVT Portable. Compared to earlier versions, it:
-
-- Focuses on a simpler, auditable install process
-- Adds practical tools (Node.js+Vite, Docker, cloudflared, tippecanoe, go‑pmtiles)
-- Improves defaults for Raspberry Pi OS trixie (e.g., /tmp tmpfs handling)
-- Keeps architecture minimal: **Caddy** + **Martin**
-
-What you get:
-
-- **Local web map server** running on Raspberry Pi
-- **Local network access** to geospatial data without internet
-- **Simple setup** using one script
-- **Caddy + Martin** based architecture
-
 ## Quick Installation
 
 ### One-line Install (Pipe to Shell)
@@ -69,6 +41,34 @@ chmod +x install.sh
 # Run the installer
 sudo ./install.sh
 ```
+
+## Architecture
+
+niroku follows the proven [x-24b architecture](https://github.com/unvt/x-24b):
+
+```
+Web Browser ←→ Caddy (Reverse Proxy) ←→ Martin (PMTiles Server)
+```
+
+- **Caddy**: Handles HTTP serving, CORS, and reverse proxying
+- **Martin**: Serves PMTiles vector tiles with high performance
+- **systemd services**: Both run as system services with automatic restart
+
+## What is niroku?
+
+niroku is the next iteration of UNVT Portable. Compared to earlier versions, it:
+
+- Focuses on a simpler, auditable install process
+- Adds practical tools (Node.js+Vite, Docker, cloudflared, tippecanoe, go‑pmtiles)
+- Improves defaults for Raspberry Pi OS trixie (e.g., /tmp tmpfs handling)
+- Keeps architecture minimal: **Caddy** + **Martin**
+
+What you get:
+
+- **Local web map server** running on Raspberry Pi
+- **Local network access** to geospatial data without internet
+- **Simple setup** using one script
+- **Caddy + Martin** based architecture
 
 ## System Requirements
 
