@@ -23,6 +23,16 @@ TIPPECANOE_MAKE_JOBS=2
 CADDY_VERSION="2.8.4"
 MARTIN_VERSION="0.14.2"
 
+# Log to a file for troubleshooting
+LOG_FILE="/tmp/niroku_install.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+# Choose a writable temporary base directory
+TMP_BASE="/tmp"
+if ! (touch "$TMP_BASE/.niroku_test" 2>/dev/null && rm -f "$TMP_BASE/.niroku_test" 2>/dev/null); then
+    TMP_BASE="/var/tmp"
+fi
+
 # Logging functions
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -173,7 +183,7 @@ install_tippecanoe() {
         fi
     fi
     log_warning "tippecanoe package not available or installation failed; building from source (this may take long)"
-    TMPDIR=$(mktemp -d)
+    TMPDIR=$(mktemp -d -p "$TMP_BASE")
     git clone --depth 1 https://github.com/felt/tippecanoe "$TMPDIR/tippecanoe"
     make -C "$TMPDIR/tippecanoe" -j"${TIPPECANOE_MAKE_JOBS:-2}"
     make -C "$TMPDIR/tippecanoe" install
@@ -273,7 +283,7 @@ install_caddy() {
     # Add Caddy repository
     # Download Caddy GPG key to a temporary file
     CADDY_GPG_KEY_URL="https://dl.cloudsmith.io/public/caddy/stable/gpg.key"
-    CADDY_GPG_KEY_TMP="/tmp/caddy.gpg.key"
+    CADDY_GPG_KEY_TMP="$TMP_BASE/caddy.gpg.key"
     CADDY_KNOWN_FINGERPRINT="E2C0DDE2C6B4D7B5CA2C4E2AA7B2C3B5A3A3F0B6" # Replace with official fingerprint from https://github.com/caddyserver/caddy/wiki/Repository-signing-keys
     curl -1sLf "$CADDY_GPG_KEY_URL" -o "$CADDY_GPG_KEY_TMP"
     if [ "${NIROKU_SKIP_CADDY_KEY_CHECK:-0}" != "1" ]; then
@@ -318,12 +328,58 @@ install_martin() {
         exit 1
     fi
     
-    # Download and extract Martin
-    wget -q -O /tmp/martin.tar.gz "$MARTIN_URL"
-    EXTRACT_DIR="/tmp/martin-extract"
-    rm -rf "$EXTRACT_DIR"
+    # Download and extract Martin (robust handling)
+    TAR_PATH="$TMP_BASE/martin.tar.gz"
+    EXTRACT_DIR="$TMP_BASE/martin-extract"
+    rm -rf "$EXTRACT_DIR" "$TAR_PATH"
+    
+    # Candidate URLs per arch (gnu and musl variants)
+    CANDIDATES=()
+    case "$ARCH" in
+        arm64|aarch64)
+            CANDIDATES+=(
+                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-aarch64-unknown-linux-gnu.tar.gz"
+                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-aarch64-unknown-linux-musl.tar.gz"
+            )
+            ;;
+        armhf|armv7l)
+            CANDIDATES+=(
+                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-armv7-unknown-linux-gnueabihf.tar.gz"
+                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-armv7-unknown-linux-musleabihf.tar.gz"
+            )
+            ;;
+        amd64|x86_64)
+            CANDIDATES+=(
+                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+            )
+            ;;
+        *) ;;
+    esac
+
+    DOWNLOAD_OK=0
+    for URL in "${CANDIDATES[@]}"; do
+        log_info "Trying to download Martin from: $URL"
+        if curl -fL -o "$TAR_PATH" "$URL"; then
+            if [ -s "$TAR_PATH" ]; then
+                DOWNLOAD_OK=1
+                break
+            else
+                log_warning "Downloaded file is 0 bytes. Trying next candidate..."
+            fi
+        else
+            log_warning "Download failed for this candidate. Trying next..."
+        fi
+    done
+
+    if [ "$DOWNLOAD_OK" -ne 1 ]; then
+        log_error "Failed to download Martin for arch $ARCH (v${MARTIN_VERSION})."
+        log_error "See available assets: https://github.com/maplibre/martin/releases/tag/v${MARTIN_VERSION}"
+        exit 1
+    fi
+
     mkdir -p "$EXTRACT_DIR"
-    tar -xzf /tmp/martin.tar.gz -C "$EXTRACT_DIR" 
+    tar -xzf "$TAR_PATH" -C "$EXTRACT_DIR" 
     # Locate the martin binary in the extracted files
     MARTIN_BIN_PATH=$(find "$EXTRACT_DIR" -type f -name martin -perm -u+x -print -quit)
     if [ -z "$MARTIN_BIN_PATH" ]; then
@@ -332,11 +388,11 @@ install_martin() {
     fi
     if [ -z "$MARTIN_BIN_PATH" ]; then
         log_error "Failed to locate martin binary in archive"
-        rm -rf "$EXTRACT_DIR" /tmp/martin.tar.gz
+        rm -rf "$EXTRACT_DIR" "$TAR_PATH"
         exit 1
     fi
     install -m 0755 "$MARTIN_BIN_PATH" /usr/local/bin/martin
-    rm -rf "$EXTRACT_DIR" /tmp/martin.tar.gz
+    rm -rf "$EXTRACT_DIR" "$TAR_PATH"
     
     log_success "Martin installed successfully"
 }
@@ -478,11 +534,14 @@ install_go_pmtiles() {
             log_error "Unsupported architecture for go-pmtiles: $ARCH"; return 1;;
     esac
     url="${base_url}/${file}"
-    tmp_tar="/tmp/${file}"
-    wget -q -O "$tmp_tar" "$url"
-    tar -xzf "$tmp_tar" -C /tmp/
-    install -m 0755 /tmp/pmtiles /usr/local/bin/pmtiles
-    rm -f "$tmp_tar" /tmp/pmtiles 2>/dev/null || true
+    tmp_tar="$TMP_BASE/${file}"
+    if ! curl -fL -o "$tmp_tar" "$url"; then
+        log_error "Failed to download go-pmtiles archive: $url"
+        return 1
+    fi
+    tar -xzf "$tmp_tar" -C "$TMP_BASE/"
+    install -m 0755 "$TMP_BASE/pmtiles" /usr/local/bin/pmtiles
+    rm -f "$tmp_tar" "$TMP_BASE/pmtiles" 2>/dev/null || true
     log_success "go-pmtiles installed as pmtiles"
 }
 

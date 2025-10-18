@@ -14,6 +14,10 @@ NC='\033[0m' # No Color
 # Configuration
 INSTALL_DIR="/opt/unvt-portable"
 
+# Log to a file for troubleshooting (symmetry with install.sh)
+LOG_FILE="/tmp/niroku_uninstall.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
+
 # Package lists
 # Base packages from simple installer (PR #2)
 BASE_PACKAGES=(aria2 btop gdal-bin jq ruby tmux vim)
