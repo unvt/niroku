@@ -130,10 +130,10 @@ disable_tmp_tmpfs() {
 update_system() {
     log_info "Updating system packages..."
     if ! apt-get update -qq; then
-        log_error "Failed to update system packages. Please check your network connection and package sources."
-        exit 1
+        log_warning "Failed to update system packages. Continuing anyway..."
+    else
+        log_success "System packages updated"
     fi
-    log_success "System packages updated"
 }
 
 # Install dependencies
