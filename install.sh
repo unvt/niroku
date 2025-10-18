@@ -150,6 +150,7 @@ install_dependencies() {
         "apt-transport-https"
         "ca-certificates"
         "lsb-release"
+        "gnupg"
         "build-essential"
         "libsqlite3-dev"
         "zlib1g-dev"
