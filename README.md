@@ -2,9 +2,11 @@
 
 **niroku** — a new implementation of UNVT Portable with JICA, for 2026 (Raspberry Pi OS trixie)
 
+[NARRATIVE](NARRATIVE.md)
+
 ## Overview
 
-**niroku** is a new implementation of UNVT Portable. It is co‑developed with JICA and targeted for 2026 use. niroku sets up an offline local web map server on Raspberry Pi OS (trixie). It uses **Caddy** (reverse proxy) and **Martin** (PMTiles tile server). It is designed for field operations where power and connectivity can be unstable.
+**niroku** is a new implementation of UNVT Portable. It is co‑developed with JICA Quick Mapping Project and targeted for 2026 use. niroku sets up an offline local web map server on Raspberry Pi OS (trixie). It uses **Caddy** (reverse proxy) and **Martin** (PMTiles tile server). It is designed for field operations where power and connectivity can be unstable.
 
 ### Architecture
 
@@ -90,7 +92,7 @@ The niroku installer will:
 8. ✅ **Install cloudflared** (2025.10.0) for Cloudflare Tunnel support
 9. ✅ **Install tippecanoe** (vector tile tool, from Debian repo or built from source)
 10. ✅ **Install go-pmtiles** (PMTiles CLI tool, v1.18.0)
-11. ✅ **Create installation directory** at `/opt/unvt-portable` with data subdirectory
+11. ✅ **Create installation directory** at `/opt/niroku` with data subdirectory
 12. ✅ **Configure services**: Both Caddy and Martin run as systemd services with automatic restart
 13. ✅ **Set up configurations**: `martin.yml` (PMTiles paths, web UI) and `Caddyfile` (reverse proxy, CORS)
 14. ✅ **Disable /tmp tmpfs** if present (prevents RAM exhaustion on Raspberry Pi)
@@ -113,7 +115,7 @@ After installation completes:
    ```
 
 2. **Add your map data**:
-   - Place PMTiles files in `/opt/unvt-portable/data`
+   - Place PMTiles files in `/opt/niroku/data`
    - Martin will automatically detect and serve them
    - Access tiles at: `http://[YOUR_IP]:8080/martin/[filename]/{z}/{x}/{y}`
 
@@ -154,7 +156,7 @@ After installation completes:
    tippecanoe -o output.pmtiles input.geojson
    
    # Example: Inspect PMTiles metadata
-   pmtiles show /opt/unvt-portable/data/yourfile.pmtiles
+   pmtiles show /opt/niroku/data/yourfile.pmtiles
    ```
 
 ## Environment Variables
@@ -165,14 +167,14 @@ For non-interactive installations (e.g., automated deployments), you can use the
 # Skip OS compatibility check
 export NIROKU_FORCE_OS=1
 
-# Force reinstall over existing installation
-export NIROKU_FORCE_REINSTALL=1
+# Keep existing installation (default is to overwrite)
+export NIROKU_KEEP_EXISTING=1
 
-# Skip Caddy GPG fingerprint verification (not recommended for production)
-export NIROKU_SKIP_CADDY_KEY_CHECK=1
+# Example: Full non-interactive install (overwrites existing by default)
+sudo NIROKU_FORCE_OS=1 ./install.sh
 
-# Example: Full non-interactive install
-sudo NIROKU_FORCE_OS=1 NIROKU_FORCE_REINSTALL=1 ./install.sh
+# Example: Non-interactive install that keeps existing installation
+sudo NIROKU_FORCE_OS=1 NIROKU_KEEP_EXISTING=1 ./install.sh
 ```
 
 ## Security Considerations
@@ -237,6 +239,37 @@ If you see errors about missing repository files (e.g., legacy cloudflared repos
 sudo rm -f /etc/apt/sources.list.d/cloudflared.list
 sudo rm -f /etc/apt/keyrings/cloudflare-main.gpg
 sudo apt-get update
+
+## Offline npm caching
+
+niroku can cache some npm packages during installation so devices with limited or no internet access can still install required frontend packages.
+
+- The installer pre-installs global npm packages using the `@latest` tag for certainty: `vite@latest`, `maplibre-gl@latest`, `pmtiles@latest`.
+- If you need to move the npm global cache to an offline device, you can archive the global node_modules and restore it on the target machine. Example workflow:
+
+```bash
+# On a machine with internet access (after running install.sh):
+sudo tar -C /usr/lib -czf /tmp/npm-global-cache.tar.gz node_modules
+sudo chown $USER:$USER /tmp/npm-global-cache.tar.gz
+
+# Copy the archive to the offline device (e.g., via USB or scp)
+sudo tar -C /usr/lib -xzf /tmp/npm-global-cache.tar.gz
+sudo npm rebuild -g || true
+```
+
+Note: Global package paths vary by distribution and Node.js packaging. On Debian-based NodeSource installs, global modules typically live under `/usr/lib/node_modules`.
+
+## Using expect to upload scripts (niroku/niroku)
+
+For automated testing we use `expect` to wrap `scp` and `ssh` so the test harness can authenticate to test devices using the `niroku` user with password `niroku`. Example `expect` one-liners used in testing:
+
+```bash
+expect -c 'set timeout 30; spawn scp -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 ./install.sh niroku@m333.local:/var/tmp/install.sh; expect -re {password:}; send "niroku\r"; expect eof'
+
+expect -c 'set timeout 1200; spawn ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 niroku@m333.local "sudo /var/tmp/install.sh"; expect -re {password:}; send "niroku\r"; expect eof'
+```
+
+Use these only for temporary testing harnesses. Do not hard-code credentials or expose them in production documentation.
 ```
 
 ### Port 8080 already in use
@@ -249,7 +282,7 @@ sudo lsof -i :8080
 sudo systemctl stop [service-name]
 
 # Or edit the Caddyfile to use a different port
-sudo nano /opt/unvt-portable/Caddyfile
+sudo nano /opt/niroku/Caddyfile
 sudo systemctl restart caddy-niroku
 ```
 
@@ -257,10 +290,10 @@ sudo systemctl restart caddy-niroku
 
 ```bash
 # Ensure files are in the correct directory
-ls -la /opt/unvt-portable/data/
+ls -la /opt/niroku/data/
 
 # Check file permissions
-sudo chmod 644 /opt/unvt-portable/data/*.pmtiles
+sudo chmod 644 /opt/niroku/data/*.pmtiles
 
 # Restart Martin
 sudo systemctl restart martin
@@ -329,7 +362,7 @@ The uninstaller will:
 7. Remove cloudflared package
 8. Remove tippecanoe (if installed from source)
 9. Remove go-pmtiles binary from `/usr/local/bin/pmtiles`
-10. Remove UNVT Portable installation directory (`/opt/unvt-portable`)
+10. Remove UNVT Portable installation directory (`/opt/niroku`)
 11. Remove base packages (`aria2`, `btop`, `gdal-bin`, `jq`, `ruby`, `tmux`, `vim`)
 12. Optionally remove comprehensive packages (you'll be prompted)
 13. Clean up unused dependencies

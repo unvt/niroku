@@ -4,6 +4,9 @@ set -euo pipefail
 # niroku - Uninstaller
 # This script removes installations made by install.sh
 
+# Set non-interactive mode for apt operations
+export DEBIAN_FRONTEND=noninteractive
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -12,7 +15,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-INSTALL_DIR="/opt/unvt-portable"
+INSTALL_DIR="/opt/niroku"
 
 # Log to a file for troubleshooting (symmetry with install.sh)
 LOG_FILE="/tmp/niroku_uninstall.log"
@@ -72,7 +75,7 @@ confirm_uninstall() {
     local items_to_remove=()
     
     if [ -d "$INSTALL_DIR" ]; then
-        items_to_remove+=("  - UNVT Portable installation at $INSTALL_DIR")
+        items_to_remove+=("  - niroku installation at $INSTALL_DIR")
     fi
     
     if systemctl is-enabled martin >/dev/null 2>&1; then
@@ -167,27 +170,28 @@ stop_caddy() {
 
 # Remove Caddy package
 remove_caddy_package() {
-    if dpkg -l | grep -q "^ii  caddy "; then
-        log_info "Removing Caddy package..."
-        apt-get purge -y caddy >/dev/null 2>&1
-        log_success "Caddy package removed"
-        
-        # Remove Caddy repository files
-        if [ -f "/etc/apt/sources.list.d/caddy-stable.list" ]; then
-            log_info "Removing Caddy repository configuration..."
-            rm -f /etc/apt/sources.list.d/caddy-stable.list
-            rm -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-            log_success "Caddy repository configuration removed"
-        fi
+    log_info "Checking Caddy package..."
+    if dpkg -l caddy 2>/dev/null | grep -q "^ii"; then
+        log_info "Purging Caddy package..."
+        apt-get purge -y caddy || true
+        log_success "Caddy package purged"
+    fi
+    
+    # Remove Caddy repository files
+    if [ -f "/etc/apt/sources.list.d/caddy-stable.list" ]; then
+        log_info "Removing Caddy repository configuration..."
+        rm -f /etc/apt/sources.list.d/caddy-stable.list
+        rm -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+        log_success "Caddy repository configuration removed"
     fi
 }
 
-# Remove UNVT Portable installation
+# Remove niroku installation
 remove_unvt_portable() {
     if [ -d "$INSTALL_DIR" ]; then
-        log_info "Removing UNVT Portable installation from $INSTALL_DIR..."
+        log_info "Removing niroku installation from $INSTALL_DIR..."
         rm -rf "$INSTALL_DIR"
-        log_success "UNVT Portable installation removed"
+        log_success "niroku installation removed"
     fi
 }
 
@@ -263,9 +267,10 @@ remove_optional_packages() {
 # Remove Node.js (NodeSource) and global Vite
 remove_node_and_vite() {
     log_info "Checking Node.js and Vite..."
-    if dpkg -l | grep -q "^ii  nodejs "; then
-        log_info "Purging nodejs..."
-        apt-get purge -y nodejs >/dev/null 2>&1 || true
+    if dpkg -l nodejs 2>/dev/null | grep -q "^ii"; then
+        log_info "Purging nodejs package..."
+        apt-get purge -y nodejs || true
+        log_success "Node.js package purged"
     fi
     # Remove NodeSource repo files if present
     if [ -f "$NODESOURCE_LIST" ]; then
@@ -278,8 +283,9 @@ remove_node_and_vite() {
     # Attempt to remove global vite if npm still available
     if command -v npm >/dev/null 2>&1; then
         npm uninstall -g vite >/dev/null 2>&1 || true
+        # Remove cached packages for offline use
+        npm uninstall -g maplibre-gl pmtiles >/dev/null 2>&1 || true
     fi
-    apt-get update -qq || true
     log_success "Node.js/Vite cleanup complete"
 }
 
@@ -324,24 +330,29 @@ main() {
     DOCKER_PKGS=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
     TO_PURGE=()
     for p in "${DOCKER_PKGS[@]}"; do
-        if dpkg -l | grep -q "^ii  ${p} "; then
+        if dpkg -l "$p" 2>/dev/null | grep -q "^ii"; then
             TO_PURGE+=("$p")
         fi
     done
     if [ ${#TO_PURGE[@]} -gt 0 ]; then
         log_info "Purging Docker packages: ${TO_PURGE[*]}"
         apt-get purge -y "${TO_PURGE[@]}" || true
+        log_success "Docker packages purged"
     else
         log_info "No Docker packages to purge"
     fi
     # Remove Docker repo and keyring
     if [ -f "$DOCKER_LIST" ]; then
         rm -f "$DOCKER_LIST" || true
+        log_info "Removed Docker repository list"
     fi
     if [ -f "$DOCKER_KEYRING" ]; then
         rm -f "$DOCKER_KEYRING" || true
+        log_info "Removed Docker GPG keyring"
     fi
-    apt-get update -qq || true
+    if [ ${#TO_PURGE[@]} -gt 0 ]; then
+        log_success "Docker cleanup complete"
+    fi
     
     # Optional data cleanup
     if [ -t 0 ] && [ -d "/var/lib/docker" ]; then
@@ -357,43 +368,59 @@ main() {
         fi
     fi
     
-    # Uninstall cloudflared and cleanup repository
+    # Uninstall cloudflared (binary installed via dpkg or .deb)
     log_info "Checking cloudflared installation..."
     # Stop possible service if exists
     if systemctl list-units --type=service --all | grep -q "cloudflared"; then
         systemctl stop cloudflared 2>/dev/null || true
         systemctl disable cloudflared 2>/dev/null || true
     fi
-    if dpkg -l | grep -q "^ii  cloudflared "; then
-        log_info "Purging cloudflared..."
+    # Check if cloudflared is installed as a package
+    if dpkg -l cloudflared 2>/dev/null | grep -q "^ii"; then
+        log_info "Purging cloudflared package..."
         apt-get purge -y cloudflared || true
+        log_success "cloudflared package purged"
     fi
+    # Remove cloudflared binary if installed manually
+    if [ -f "/usr/local/bin/cloudflared" ]; then
+        rm -f /usr/local/bin/cloudflared || true
+        log_info "Removed /usr/local/bin/cloudflared"
+    fi
+    # Clean up legacy repository files (if any)
     if [ -f "$CLOUDFLARED_LIST" ]; then
         rm -f "$CLOUDFLARED_LIST" || true
     fi
     if [ -f "$CLOUDFLARED_KEYRING" ]; then
         rm -f "$CLOUDFLARED_KEYRING" || true
     fi
-    apt-get update -qq || true
+    log_success "cloudflared cleanup complete"
     
     # Remove tippecanoe (package or binaries)
-    if dpkg -l | grep -q "^ii  tippecanoe "; then
+    log_info "Checking tippecanoe installation..."
+    if dpkg -l tippecanoe 2>/dev/null | grep -q "^ii"; then
         log_info "Purging tippecanoe package..."
         apt-get purge -y tippecanoe || true
+        log_success "tippecanoe package purged"
     else
         # If installed from source, binaries are in /usr/local/bin
-        for bin in tippecanoe tile-join tippecanoe-enumerate; do
+        REMOVED=0
+        for bin in tippecanoe tile-join tippecanoe-enumerate tippecanoe-decode; do
             if [ -f "/usr/local/bin/$bin" ]; then
                 rm -f "/usr/local/bin/$bin" || true
                 log_info "Removed /usr/local/bin/$bin"
+                REMOVED=1
             fi
         done
+        if [ "$REMOVED" -eq 1 ]; then
+            log_success "tippecanoe binaries removed"
+        fi
     fi
     
     # Remove go-pmtiles CLI
+    log_info "Checking go-pmtiles installation..."
     if [ -f "/usr/local/bin/pmtiles" ]; then
         rm -f /usr/local/bin/pmtiles || true
-        log_info "Removed /usr/local/bin/pmtiles"
+        log_success "Removed /usr/local/bin/pmtiles"
     fi
     
     # Optionally restore tmpfs on /tmp (symmetry with install.sh)

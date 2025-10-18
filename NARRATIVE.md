@@ -1,6 +1,6 @@
 # NARRATIVE
 
-This document explains the ideas behind niroku and the history of this project. It is written in simple English so it is easy to understand.
+This document explains the ideas behind niroku and the history of this project.
 
 ## Why niroku exists
 
@@ -25,6 +25,8 @@ We use generative AI in two ways:
 
 As companions, AIs are not adversaries. We do not scold them, publicly attack them, or treat them as enemies. Errors made by our AI companions are our errors too. We accept these errors, and we fix them together. This is our culture.
 
+In this niroku project, generative AI coded the scripts and the markdown files, with help from human members. 
+
 ## The portable web
 
 We focus on the portable web so people can use and learn Smart Maps in constrained or unstable environments. Our goal is to make technologies used by full‑scale web map servers run smoothly on single‑board computers (SBCs) such as the Raspberry Pi 4B.
@@ -43,6 +45,8 @@ niroku is a small installer that brings together Caddy (web server) and Martin (
 - Using secure, verifiable package sources where practical
 - Being easy to review and modify
 
+niroku installs web map data production tools such as tippecanoe, go-pmtiles, gdal-bin. See README.md for details. 
+
 ## History (short)
 
 - 2022–2024: UNVT Portable and related tools matured in the community
@@ -54,17 +58,14 @@ niroku is a small installer that brings together Caddy (web server) and Martin (
 ## Principles
 
 - Keep things simple and understandable
-- Prefer open standards and open‑source tools
 - Respect the constraints of our users (power, connectivity, hardware)
-- Use generative AI responsibly as agents and as companions
-- Errors are shared; we fix them together
+- Use generative AI responsibly as companions
+- Errors are common, and shared; we fix them together
 
 ## What is next
 
 - Improve documentation that is easy to understand
 - Make installation faster and safer when possible
-- Add small, practical examples to help learning
-- Keep the project aligned with the UN Smart Maps Group vision
 
 ## What this project does
 
@@ -90,7 +91,7 @@ We follow a simple and transparent workflow:
 3. Use symmetry: anything installed by install.sh must be removable by uninstall.sh
 4. Write documentation in easy English for non‑native speakers
 5. Respect security: prefer verified repositories and signatures where practical
-6. Test on real Raspberry Pi devices when possible
+6. Test on Raspberry Pi devices when possible
 7. Handle errors gracefully: provide fallback paths, multiple download candidates, and clear error messages
 8. Log everything: installation and uninstallation logs help with remote troubleshooting
 

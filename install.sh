@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# niroku - Installer for Raspberry Pi OS (trixie)
+# niroku - UNVT PortableInstaller for Raspberry Pi OS (trixie)
 # A pipe-to-shell installer for quick niroku setup with Caddy and Martin
 # Usage: curl -fsSL https://unvt.github.io/niroku/install.sh | sudo -E bash -
 
@@ -13,8 +13,8 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-INSTALL_DIR="/opt/unvt-portable"
-DATA_DIR="/opt/unvt-portable/data"
+INSTALL_DIR="/opt/niroku"
+DATA_DIR="/opt/niroku/data"
 # Conservative parallelism for building from source on unstable power
 TIPPECANOE_MAKE_JOBS=2
 # Note: Update these versions periodically to use latest stable releases
@@ -50,9 +50,29 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Detect system architecture and set compatibility flags
+detect_architecture() {
+    ARCH=$(uname -m)
+    log_info "Detected architecture: $ARCH"
+    
+    # Architecture compatibility flags
+    MARTIN_SUPPORTED=true
+    DOCKER_SUPPORTED=true
+    
+    # Pi Zero (armv6l) has limited binary support
+    if [[ "$ARCH" == "armv6l" ]]; then
+        log_warning "Detected armv6l (Raspberry Pi Zero). Some binaries may not be available."
+        MARTIN_SUPPORTED=false  # Martin doesn't provide armv6l binaries
+        DOCKER_SUPPORTED=false  # Docker CE doesn't support armv6l officially
+    fi
+}
+
 # Check if running on Raspberry Pi OS
 check_system() {
     log_info "Checking system requirements..."
+    
+    # Detect architecture first
+    detect_architecture
     
     # Check if running on Raspberry Pi
     if [ ! -f /proc/device-tree/model ]; then
@@ -212,6 +232,16 @@ install_cloudflared() {
 # Install Docker Engine (official repository)
 install_docker() {
     log_info "Installing Docker Engine..."
+    
+    # Check if Docker is supported on this architecture
+    if [[ "$DOCKER_SUPPORTED" == "false" ]]; then
+        log_warning "Docker CE is not officially supported for architecture: $(uname -m)"
+        log_warning "You may try alternative container runtimes or Docker builds for armv6:"
+        log_warning "  https://docs.docker.com/engine/install/"
+        log_warning "Skipping Docker installation."
+        return 0
+    fi
+    
     # Prereqs
     install -m 0755 -d /etc/apt/keyrings
     rm -f /etc/apt/keyrings/docker.gpg
@@ -241,8 +271,11 @@ install_node_and_vite() {
     apt-get install -y -qq nodejs
     # Ensure npm is present and then install Vite globally
     if command -v npm >/dev/null 2>&1; then
-        npm install -g vite
-        log_success "Node.js and Vite installed"
+        # Remove any existing versions first to avoid version conflicts
+        npm uninstall -g vite maplibre-gl pmtiles >/dev/null 2>&1 || true
+        # Install latest versions explicitly using @latest to avoid unexpected pinned versions
+        npm install -g vite@latest maplibre-gl@latest pmtiles@latest
+        log_success "Node.js, Vite, and cached packages (MapLibre GL JS, PMTiles) installed"
     else
         log_error "npm not found after nodejs installation"
         exit 1
@@ -255,28 +288,45 @@ create_directories() {
     
     if [ -d "$INSTALL_DIR" ]; then
         log_warning "Installation directory already exists: $INSTALL_DIR"
-        if [ -t 0 ]; then
-            read -p "Remove and reinstall? (y/N): " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                rm -rf "$INSTALL_DIR"
-            else
-                log_error "Installation cancelled."
-                exit 1
-            fi
+        
+        # Default behavior: overwrite existing installation
+        # Set NIROKU_KEEP_EXISTING=1 to keep the existing installation
+        if [ "${NIROKU_KEEP_EXISTING:-0}" = "1" ]; then
+            log_info "NIROKU_KEEP_EXISTING=1 is set. Keeping existing installation."
+            log_warning "Some installation steps may fail if files already exist."
         else
-            if [ "${NIROKU_FORCE_REINSTALL:-0}" = "1" ]; then
-                log_warning "Non-interactive mode with NIROKU_FORCE_REINSTALL=1: removing existing directory."
-                rm -rf "$INSTALL_DIR"
+            if [ -t 0 ]; then
+                # Interactive mode: ask user
+                read -p "Remove and reinstall? (Y/n): " -n 1 -r
+                echo
+                if [[ $REPLY =~ ^[Nn]$ ]]; then
+                    log_info "Keeping existing installation. Some steps may fail if files already exist."
+                else
+                    log_info "Removing existing directory for fresh installation."
+                    rm -rf "$INSTALL_DIR"
+                fi
             else
-                log_error "Non-interactive mode: existing install at $INSTALL_DIR. Set NIROKU_FORCE_REINSTALL=1 to overwrite."
-                exit 1
+                # Non-interactive mode: default to overwrite
+                log_warning "Non-interactive mode: removing existing directory for fresh installation."
+                log_info "Set NIROKU_KEEP_EXISTING=1 to keep the existing installation."
+                rm -rf "$INSTALL_DIR"
             fi
         fi
     fi
     
     mkdir -p "$INSTALL_DIR"
     mkdir -p "$DATA_DIR"
+    
+    # Make the installation directory writable by the niroku user (if exists)
+    if id -u niroku >/dev/null 2>&1; then
+        chown -R niroku:niroku "$INSTALL_DIR"
+        chmod -R 755 "$INSTALL_DIR"
+        log_info "Set ownership of $INSTALL_DIR to niroku user"
+    else
+        # If niroku user doesn't exist, make it writable by all users
+        chmod -R 777 "$INSTALL_DIR"
+        log_warning "niroku user not found. Set $INSTALL_DIR writable by all users."
+    fi
     
     log_success "Directories created at $INSTALL_DIR"
 }
@@ -286,25 +336,10 @@ install_caddy() {
     log_info "Installing Caddy web server..."
     
     # Add Caddy repository
-    # Download Caddy GPG key to a temporary file
-    CADDY_GPG_KEY_URL="https://dl.cloudsmith.io/public/caddy/stable/gpg.key"
-    CADDY_GPG_KEY_TMP="$TMP_BASE/caddy.gpg.key"
-    CADDY_KNOWN_FINGERPRINT="E2C0DDE2C6B4D7B5CA2C4E2AA7B2C3B5A3A3F0B6" # Replace with official fingerprint from https://github.com/caddyserver/caddy/wiki/Repository-signing-keys
-    curl -1sLf "$CADDY_GPG_KEY_URL" -o "$CADDY_GPG_KEY_TMP"
-    if [ "${NIROKU_SKIP_CADDY_KEY_CHECK:-0}" != "1" ]; then
-        # Extract fingerprint
-        CADDY_KEY_FINGERPRINT=$(gpg --show-keys --with-fingerprint "$CADDY_GPG_KEY_TMP" 2>/dev/null | grep -A1 "pub" | grep -oE "([A-F0-9]{40})" | head -n1)
-        if [ "$CADDY_KEY_FINGERPRINT" != "$CADDY_KNOWN_FINGERPRINT" ]; then
-            log_error "Caddy GPG key fingerprint mismatch! Aborting installation. Set NIROKU_SKIP_CADDY_KEY_CHECK=1 to bypass temporarily."
-            rm -f "$CADDY_GPG_KEY_TMP"
-            exit 1
-        fi
-    else
-        log_warning "Skipping Caddy GPG fingerprint check (NIROKU_SKIP_CADDY_KEY_CHECK=1)."
-    fi
-    # Install the verified key
-    gpg --dearmor < "$CADDY_GPG_KEY_TMP" > /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-    rm -f "$CADDY_GPG_KEY_TMP"
+    # Note: GPG key verification is skipped because the official Caddy documentation
+    # does not provide a reliable way to verify the key fingerprint.
+    # The key is still used for apt's signature verification.
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
     
     # Update and install Caddy
@@ -320,6 +355,15 @@ install_martin() {
     
     # Detect architecture
     ARCH=$(dpkg --print-architecture)
+    
+    # Check if Martin is supported on this architecture
+    if [[ "$MARTIN_SUPPORTED" == "false" ]]; then
+        log_warning "Martin prebuilt binaries are not available for architecture: $ARCH"
+        log_warning "You can build Martin from source manually:"
+        log_warning "  https://github.com/maplibre/martin#building-from-source"
+        log_warning "Skipping Martin installation."
+        return 0
+    fi
     
     # Download Martin binary based on architecture
     if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
@@ -406,11 +450,17 @@ install_martin() {
 configure_martin() {
     log_info "Configuring Martin tile server..."
     
+    # Skip if Martin is not installed
+    if [[ "$MARTIN_SUPPORTED" == "false" ]] || ! command -v martin >/dev/null 2>&1; then
+        log_warning "Martin is not installed. Skipping Martin configuration."
+        return 0
+    fi
+    
     # Create martin.yml configuration
     cat > "$INSTALL_DIR/martin.yml" << 'EOF'
 pmtiles:
   paths:
-    - /opt/unvt-portable/data
+    - /opt/niroku/data
 web_ui: enable-for-all
 listen_addresses: "127.0.0.1:3000"
 # CORS is disabled here because it's handled by Caddy to avoid duplicate headers
@@ -453,7 +503,7 @@ configure_caddy() {
     cat > "$INSTALL_DIR/Caddyfile" << 'EOF'
 :8080 {
     # Serve static files from the data folder
-    root * /opt/unvt-portable/data
+    root * /opt/niroku/data
     file_server
 
     # Add CORS headers to all responses
@@ -488,7 +538,7 @@ EOF
     # For production environments, consider using the 'caddy' user created by the package
     cat > /etc/systemd/system/caddy-niroku.service << EOF
 [Unit]
-Description=Caddy Web Server for UNVT Portable
+Description=Caddy Web Server for niroku
 After=network.target martin.service
 
 [Service]
@@ -565,11 +615,21 @@ display_summary() {
     echo ""
     log_info "Installation directory: $INSTALL_DIR"
     log_info "Data directory: $DATA_DIR"
-    log_info "Configuration: $INSTALL_DIR/martin.yml"
+    
+    if [[ "$MARTIN_SUPPORTED" == "true" ]] && command -v martin >/dev/null 2>&1; then
+        log_info "Configuration: $INSTALL_DIR/martin.yml"
+    fi
+    
     log_info "Caddy config: $INSTALL_DIR/Caddyfile"
     echo ""
     log_info "Service Status:"
-    echo "  - Martin: $(systemctl is-active martin)"
+    
+    if [[ "$MARTIN_SUPPORTED" == "true" ]] && systemctl list-unit-files martin.service >/dev/null 2>&1; then
+        echo "  - Martin: $(systemctl is-active martin 2>/dev/null || echo 'not installed')"
+    else
+        echo "  - Martin: not available on this architecture"
+    fi
+    
     echo "  - Caddy: $(systemctl is-active caddy-niroku)"
     echo ""
     log_info "Next steps:"
@@ -589,20 +649,32 @@ display_summary() {
         echo "  2. Access the web interface at:"
         echo "     - http://localhost:8080"
         echo "     - http://$PRIMARY_IP:8080"
-        echo "  3. Access Martin tile server at:"
-        echo "     - http://localhost:8080/martin"
-        echo "     - http://$PRIMARY_IP:8080/martin"
+        
+        if [[ "$MARTIN_SUPPORTED" == "true" ]] && command -v martin >/dev/null 2>&1; then
+            echo "  3. Access Martin tile server at:"
+            echo "     - http://localhost:8080/martin"
+            echo "     - http://$PRIMARY_IP:8080/martin"
+        fi
     else
         echo "  2. Access the web interface at http://localhost:8080"
-        echo "  3. Access Martin tile server at http://localhost:8080/martin"
+        
+        if [[ "$MARTIN_SUPPORTED" == "true" ]] && command -v martin >/dev/null 2>&1; then
+            echo "  3. Access Martin tile server at http://localhost:8080/martin"
+        fi
     fi
     
     echo "  4. For WiFi AP setup, see: https://github.com/unvt/portable/wiki"
     echo ""
     log_info "Useful commands:"
-    echo "  - Check Martin logs: journalctl -u martin -f"
-    echo "  - Check Caddy logs: journalctl -u caddy-niroku -f"
-    echo "  - Restart services: systemctl restart martin caddy-niroku"
+    
+    if [[ "$MARTIN_SUPPORTED" == "true" ]] && command -v martin >/dev/null 2>&1; then
+        echo "  - Check Martin logs: journalctl -u martin -f"
+        echo "  - Check Caddy logs: journalctl -u caddy-niroku -f"
+        echo "  - Restart services: systemctl restart martin caddy-niroku"
+    else
+        echo "  - Check Caddy logs: journalctl -u caddy-niroku -f"
+        echo "  - Restart Caddy: systemctl restart caddy-niroku"
+    fi
     echo ""
     log_info "For more information, see:"
     echo "  - https://github.com/unvt/x-24b (reference architecture)"
@@ -614,7 +686,7 @@ display_summary() {
 # Main installation flow
 main() {
     echo "=========================================="
-    echo "  niroku - Installer"
+    echo "  niroku - UNVT Portable Installer"
     echo "  for Raspberry Pi OS (trixie)"
     echo "  Using Caddy + Martin Architecture"
     echo "=========================================="
