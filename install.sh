@@ -48,7 +48,8 @@ check_system() {
     if [ ! -f /proc/device-tree/model ]; then
         log_warning "Cannot detect Raspberry Pi model. Proceeding anyway..."
     else
-        PI_MODEL=$(cat /proc/device-tree/model)
+        # Some device-tree files may include NUL bytes; strip them for safe logging
+        PI_MODEL=$(tr -d '\0' </proc/device-tree/model)
         log_info "Detected: $PI_MODEL"
     fi
     
@@ -319,10 +320,23 @@ install_martin() {
     
     # Download and extract Martin
     wget -q -O /tmp/martin.tar.gz "$MARTIN_URL"
-    tar -xzf /tmp/martin.tar.gz -C /tmp/
-    mv /tmp/martin /usr/local/bin/martin
-    chmod +x /usr/local/bin/martin
-    rm /tmp/martin.tar.gz
+    EXTRACT_DIR="/tmp/martin-extract"
+    rm -rf "$EXTRACT_DIR"
+    mkdir -p "$EXTRACT_DIR"
+    tar -xzf /tmp/martin.tar.gz -C "$EXTRACT_DIR" 
+    # Locate the martin binary in the extracted files
+    MARTIN_BIN_PATH=$(find "$EXTRACT_DIR" -type f -name martin -perm -u+x -print -quit)
+    if [ -z "$MARTIN_BIN_PATH" ]; then
+        # Fallback: pick a file named martin even if not marked executable
+        MARTIN_BIN_PATH=$(find "$EXTRACT_DIR" -type f -name martin -print -quit)
+    fi
+    if [ -z "$MARTIN_BIN_PATH" ]; then
+        log_error "Failed to locate martin binary in archive"
+        rm -rf "$EXTRACT_DIR" /tmp/martin.tar.gz
+        exit 1
+    fi
+    install -m 0755 "$MARTIN_BIN_PATH" /usr/local/bin/martin
+    rm -rf "$EXTRACT_DIR" /tmp/martin.tar.gz
     
     log_success "Martin installed successfully"
 }
