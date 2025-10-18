@@ -21,7 +21,7 @@ TIPPECANOE_MAKE_JOBS=2
 # Check https://github.com/caddyserver/caddy/releases
 # Check https://github.com/maplibre/martin/releases
 CADDY_VERSION="2.8.4"
-MARTIN_VERSION="0.19.3"
+MARTIN_VERSION="martin-v0.19.3"
 
 # Log to a file for troubleshooting
 LOG_FILE="/tmp/niroku_install.log"
@@ -333,31 +333,25 @@ install_martin() {
     EXTRACT_DIR="$TMP_BASE/martin-extract"
     rm -rf "$EXTRACT_DIR" "$TAR_PATH"
     
-    # Candidate URLs per arch (gnu and musl variants) and both .tar.xz/.tar.gz
+    # Candidate URLs per arch (gnu and musl variants) - only .tar.gz available
     CANDIDATES=()
     case "$ARCH" in
         arm64|aarch64)
             CANDIDATES+=(
-                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-aarch64-unknown-linux-gnu.tar.xz"
-                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-aarch64-unknown-linux-gnu.tar.gz"
-                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-aarch64-unknown-linux-musl.tar.xz"
-                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-aarch64-unknown-linux-musl.tar.gz"
+                "https://github.com/maplibre/martin/releases/download/${MARTIN_VERSION}/martin-aarch64-unknown-linux-gnu.tar.gz"
+                "https://github.com/maplibre/martin/releases/download/${MARTIN_VERSION}/martin-aarch64-unknown-linux-musl.tar.gz"
             )
             ;;
         armhf|armv7l)
             CANDIDATES+=(
-                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-armv7-unknown-linux-gnueabihf.tar.xz"
-                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-armv7-unknown-linux-gnueabihf.tar.gz"
-                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-armv7-unknown-linux-musleabihf.tar.xz"
-                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-armv7-unknown-linux-musleabihf.tar.gz"
+                "https://github.com/maplibre/martin/releases/download/${MARTIN_VERSION}/martin-armv7-unknown-linux-gnueabihf.tar.gz"
+                "https://github.com/maplibre/martin/releases/download/${MARTIN_VERSION}/martin-armv7-unknown-linux-musleabihf.tar.gz"
             )
             ;;
         amd64|x86_64)
             CANDIDATES+=(
-                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-x86_64-unknown-linux-gnu.tar.xz"
-                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
-                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-x86_64-unknown-linux-musl.tar.xz"
-                "https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+                "https://github.com/maplibre/martin/releases/download/${MARTIN_VERSION}/martin-x86_64-unknown-linux-gnu.tar.gz"
+                "https://github.com/maplibre/martin/releases/download/${MARTIN_VERSION}/martin-x86_64-unknown-linux-musl.tar.gz"
             )
             ;;
         *) ;;
@@ -385,17 +379,7 @@ install_martin() {
     fi
 
     mkdir -p "$EXTRACT_DIR"
-    if echo "$TAR_PATH" | grep -qE "\.tar\.xz$"; then
-        tar -xJf "$TAR_PATH" -C "$EXTRACT_DIR"
-    elif echo "$TAR_PATH" | grep -qE "\.tar\.gz$"; then
-        tar -xzf "$TAR_PATH" -C "$EXTRACT_DIR"
-    else
-        # Try generic extraction as a fallback
-        tar -xf "$TAR_PATH" -C "$EXTRACT_DIR" || {
-            log_error "Could not extract Martin archive: $TAR_PATH"
-            exit 1
-        }
-    fi
+    tar -xzf "$TAR_PATH" -C "$EXTRACT_DIR"
     # Locate the martin binary in the extracted files
     MARTIN_BIN_PATH=$(find "$EXTRACT_DIR" -type f -name martin -perm -u+x -print -quit)
     if [ -z "$MARTIN_BIN_PATH" ]; then
