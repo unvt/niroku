@@ -194,14 +194,10 @@ install_tippecanoe() {
 # Install Cloudflare Tunnel client (cloudflared)
 install_cloudflared() {
     log_info "Installing cloudflared (Cloudflare Tunnel client)..."
-    install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | gpg --dearmor -o /etc/apt/keyrings/cloudflare-main.gpg
-    chmod a+r /etc/apt/keyrings/cloudflare-main.gpg
-    . /etc/os-release
-    echo "deb [signed-by=/etc/apt/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/ ${VERSION_CODENAME} main" \
-        | tee /etc/apt/sources.list.d/cloudflared.list >/dev/null
-    apt-get update -qq
-    apt-get install -y -qq cloudflared
+    CLOUDFLARED_VERSION="2025.10.0"
+    CLOUDFLARED_URL="https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-arm64"
+    curl -fL -o /usr/local/bin/cloudflared "$CLOUDFLARED_URL"
+    chmod +x /usr/local/bin/cloudflared
     log_success "cloudflared installed"
 }
 
