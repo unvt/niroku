@@ -223,10 +223,62 @@ install_cloudflared() {
     log_info "Installing cloudflared (Cloudflare Tunnel client)..."
     CLOUDFLARED_DEB_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb"
     CLOUDFLARED_DEB="$TMP_BASE/cloudflared.deb"
-    curl -L -o "$CLOUDFLARED_DEB" "$CLOUDFLARED_DEB_URL"
+    try_download "$CLOUDFLARED_DEB" "$CLOUDFLARED_DEB_URL"
     dpkg -i "$CLOUDFLARED_DEB"
     rm -f "$CLOUDFLARED_DEB"
     log_success "cloudflared installed"
+}
+
+# Helper: try_download(dest, url1, url2, ...)
+# Attempts to download each URL in order to dest. Exits non-zero if all fail.
+try_download() {
+    local dest="$1"; shift
+    local url
+    rm -f "$dest"
+    for url in "$@"; do
+        log_info "Attempting download: $url"
+        if curl -fL -o "$dest" "$url"; then
+            if [ -s "$dest" ]; then
+                log_info "Download succeeded: $url"
+                return 0
+            else
+                log_warning "Downloaded file is empty: $url"
+            fi
+        else
+            log_warning "Download failed for: $url"
+        fi
+    done
+    log_error "All download attempts failed for destination: $dest"
+    return 1
+}
+
+# Helper: create_systemd_service <unit_path>
+# Writes stdin to the given systemd unit path, reloads systemd, enables and starts the unit.
+create_systemd_service() {
+    local unit_path="$1"
+    if [ -z "$unit_path" ]; then
+        log_error "create_systemd_service requires a unit path argument"
+        return 1
+    fi
+    log_info "Creating systemd unit: $unit_path"
+    mkdir -p "$(dirname "$unit_path")"
+    # Write unit file from stdin
+    cat > "$unit_path"
+    # Reload and attempt to enable/start the service
+    systemctl daemon-reload || true
+    local unit_name
+    unit_name=$(basename "$unit_path")
+    if systemctl enable "$unit_name" >/dev/null 2>&1; then
+        log_info "Enabled $unit_name"
+    else
+        log_warning "Could not enable $unit_name"
+    fi
+    if systemctl start "$unit_name" >/dev/null 2>&1; then
+        log_info "Started $unit_name"
+    else
+        log_warning "Could not start $unit_name now"
+    fi
+    log_success "Systemd unit created: $unit_name"
 }
 
 # Install Docker Engine (official repository)
@@ -367,62 +419,37 @@ install_martin() {
     fi
     
     # Download Martin binary based on architecture
-    if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
-        MARTIN_URL="https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-aarch64-unknown-linux-gnu.tar.gz"
-    elif [ "$ARCH" = "armhf" ] || [ "$ARCH" = "armv7l" ]; then
-        MARTIN_URL="https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-armv7-unknown-linux-gnueabihf.tar.gz"
-    elif [ "$ARCH" = "amd64" ] || [ "$ARCH" = "x86_64" ]; then
-        MARTIN_URL="https://github.com/maplibre/martin/releases/download/v${MARTIN_VERSION}/martin-v${MARTIN_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
-    else
-        log_error "Unsupported architecture: $ARCH"
-        exit 1
-    fi
-    
-    # Download and extract Martin (robust handling)
     TAR_PATH="$TMP_BASE/martin.tar.gz"
     EXTRACT_DIR="$TMP_BASE/martin-extract"
     rm -rf "$EXTRACT_DIR" "$TAR_PATH"
-    
-    # Candidate URLs per arch (gnu and musl variants) - only .tar.gz available
+
     CANDIDATES=()
     case "$ARCH" in
         arm64|aarch64)
-            CANDIDATES+=(
+            CANDIDATES=(
                 "https://github.com/maplibre/martin/releases/download/${MARTIN_VERSION}/martin-aarch64-unknown-linux-gnu.tar.gz"
                 "https://github.com/maplibre/martin/releases/download/${MARTIN_VERSION}/martin-aarch64-unknown-linux-musl.tar.gz"
             )
             ;;
         armhf|armv7l)
-            CANDIDATES+=(
+            CANDIDATES=(
                 "https://github.com/maplibre/martin/releases/download/${MARTIN_VERSION}/martin-armv7-unknown-linux-gnueabihf.tar.gz"
                 "https://github.com/maplibre/martin/releases/download/${MARTIN_VERSION}/martin-armv7-unknown-linux-musleabihf.tar.gz"
             )
             ;;
         amd64|x86_64)
-            CANDIDATES+=(
+            CANDIDATES=(
                 "https://github.com/maplibre/martin/releases/download/${MARTIN_VERSION}/martin-x86_64-unknown-linux-gnu.tar.gz"
                 "https://github.com/maplibre/martin/releases/download/${MARTIN_VERSION}/martin-x86_64-unknown-linux-musl.tar.gz"
             )
             ;;
-        *) ;;
+        *)
+            log_error "Unsupported architecture: $ARCH"
+            exit 1
+            ;;
     esac
 
-    DOWNLOAD_OK=0
-    for URL in "${CANDIDATES[@]}"; do
-        log_info "Trying to download Martin from: $URL"
-        if curl -fL -o "$TAR_PATH" "$URL"; then
-            if [ -s "$TAR_PATH" ]; then
-                DOWNLOAD_OK=1
-                break
-            else
-                log_warning "Downloaded file is 0 bytes. Trying next candidate..."
-            fi
-        else
-            log_warning "Download failed for this candidate. Trying next..."
-        fi
-    done
-
-    if [ "$DOWNLOAD_OK" -ne 1 ]; then
+    if ! try_download "$TAR_PATH" "${CANDIDATES[@]}"; then
         log_error "Failed to download Martin for arch $ARCH (v${MARTIN_VERSION})."
         log_error "See available assets: https://github.com/maplibre/martin/releases/tag/v${MARTIN_VERSION}"
         exit 1
@@ -468,10 +495,8 @@ listen_addresses: "127.0.0.1:3000"
 cors: false
 EOF
     
-    # Create systemd service for Martin
-    # Note: Running as root for simplicity in portable/field deployment scenarios
-    # For production environments, consider creating a dedicated 'martin' user
-    cat > /etc/systemd/system/martin.service << EOF
+    # Create systemd service for Martin using helper
+    create_systemd_service /etc/systemd/system/martin.service << EOF
 [Unit]
 Description=Martin Tile Server
 After=network.target
@@ -487,13 +512,8 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-    
-    # Enable and start Martin service
-    systemctl daemon-reload
-    systemctl enable martin
-    systemctl start martin
-    
-    log_success "Martin configured and started"
+
+    log_success "Martin configured (systemd unit created)"
 }
 
 # Configure Caddy
@@ -534,10 +554,8 @@ configure_caddy() {
 }
 EOF
     
-    # Create systemd service for Caddy with custom Caddyfile
-    # Note: Running as root for simplicity in portable/field deployment scenarios
-    # For production environments, consider using the 'caddy' user created by the package
-    cat > /etc/systemd/system/caddy-niroku.service << EOF
+    # Create systemd service for Caddy with custom Caddyfile using helper
+    create_systemd_service /etc/systemd/system/caddy-niroku.service << EOF
 [Unit]
 Description=Caddy Web Server for niroku
 After=network.target martin.service
@@ -553,17 +571,12 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-    
+
     # Stop default Caddy if running
     systemctl stop caddy 2>/dev/null || true
     systemctl disable caddy 2>/dev/null || true
-    
-    # Enable and start Caddy-niroku service
-    systemctl daemon-reload
-    systemctl enable caddy-niroku
-    systemctl start caddy-niroku
-    
-    log_success "Caddy configured and started"
+
+    log_success "Caddy configured (systemd unit created)"
 }
 
 # Setup WiFi Access Point (optional)
@@ -591,7 +604,7 @@ install_go_pmtiles() {
     esac
     url="${base_url}/${file}"
     tmp_tar="$TMP_BASE/${file}"
-    if ! curl -fL -o "$tmp_tar" "$url"; then
+    if ! try_download "$tmp_tar" "$url"; then
         log_error "Failed to download go-pmtiles archive: $url"
         return 1
     fi
@@ -684,6 +697,45 @@ display_summary() {
     echo ""
 }
 
+# Lightweight smoke checks run after installation to provide quick feedback.
+post_install_smoke_checks() {
+    log_info "Running post-install smoke checks..."
+
+    # Check Martin binary and service
+    if command -v martin >/dev/null 2>&1; then
+        log_info "martin binary found: $(command -v martin)"
+    else
+        log_warning "martin binary not found"
+    fi
+
+    if systemctl list-unit-files martin.service >/dev/null 2>&1; then
+        MARTIN_ACTIVE=$(systemctl is-active martin 2>/dev/null || echo inactive)
+        log_info "Martin service status: $MARTIN_ACTIVE"
+    else
+        log_info "Martin service not present on this architecture or not installed"
+    fi
+
+    # Check Caddy service
+    if systemctl list-unit-files caddy-niroku.service >/dev/null 2>&1; then
+        CADDY_ACTIVE=$(systemctl is-active caddy-niroku 2>/dev/null || echo inactive)
+        log_info "Caddy-niroku service status: $CADDY_ACTIVE"
+    else
+        log_warning "Caddy-niroku service not found"
+    fi
+
+    # Quick HTTP check for Caddy root (localhost:8080)
+    if command -v curl >/dev/null 2>&1; then
+        if curl -s --max-time 5 http://127.0.0.1:8080/ >/dev/null 2>&1; then
+            log_info "Caddy responded on http://127.0.0.1:8080/"
+        else
+            log_warning "No HTTP response from Caddy on http://127.0.0.1:8080/ (this may be expected until files are placed in $DATA_DIR)"
+        fi
+    fi
+
+    log_success "Post-install smoke checks completed"
+}
+
+
 # Main installation flow
 main() {
     echo "=========================================="
@@ -710,9 +762,49 @@ main() {
     setup_wifi_ap
     generate_qr_codes
     display_summary
+    # Run lightweight smoke checks to validate services and binaries
+    post_install_smoke_checks
     
     log_success "Installation completed successfully!"
 }
 
 # Run main function
 main
+
+# Lightweight smoke checks run after installation to provide quick feedback.
+post_install_smoke_checks() {
+    log_info "Running post-install smoke checks..."
+
+    # Check Martin binary and service
+    if command -v martin >/dev/null 2>&1; then
+        log_info "martin binary found: $(command -v martin)"
+    else
+        log_warning "martin binary not found"
+    fi
+
+    if systemctl list-unit-files martin.service >/dev/null 2>&1; then
+        MARTIN_ACTIVE=$(systemctl is-active martin 2>/dev/null || echo inactive)
+        log_info "Martin service status: $MARTIN_ACTIVE"
+    else
+        log_info "Martin service not present on this architecture or not installed"
+    fi
+
+    # Check Caddy service
+    if systemctl list-unit-files caddy-niroku.service >/dev/null 2>&1; then
+        CADDY_ACTIVE=$(systemctl is-active caddy-niroku 2>/dev/null || echo inactive)
+        log_info "Caddy-niroku service status: $CADDY_ACTIVE"
+    else
+        log_warning "Caddy-niroku service not found"
+    fi
+
+    # Quick HTTP check for Caddy root (localhost:8080)
+    if command -v curl >/dev/null 2>&1; then
+        if curl -s --max-time 5 http://127.0.0.1:8080/ >/dev/null 2>&1; then
+            log_info "Caddy responded on http://127.0.0.1:8080/"
+        else
+            log_warning "No HTTP response from Caddy on http://127.0.0.1:8080/ (this may be expected until files are placed in $DATA_DIR)"
+        fi
+    fi
+
+    log_success "Post-install smoke checks completed"
+}

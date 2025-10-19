@@ -187,11 +187,35 @@ remove_caddy_package() {
 }
 
 # Remove niroku installation
-remove_unvt_portable() {
+remove_niroku_installation() {
     if [ -d "$INSTALL_DIR" ]; then
         log_info "Removing niroku installation from $INSTALL_DIR..."
         rm -rf "$INSTALL_DIR"
         log_success "niroku installation removed"
+    fi
+}
+
+# High-level removals for symmetry with install.sh
+remove_martin() {
+    log_info "Removing Martin service and binary (if present)..."
+    stop_martin
+    log_success "Martin removal complete"
+}
+
+remove_caddy() {
+    log_info "Removing Caddy services and package (if present)..."
+    stop_caddy
+    remove_caddy_package
+    log_success "Caddy removal complete"
+}
+
+remove_go_pmtiles() {
+    log_info "Checking go-pmtiles installation..."
+    if [ -f "/usr/local/bin/pmtiles" ]; then
+        rm -f /usr/local/bin/pmtiles || true
+        log_success "Removed /usr/local/bin/pmtiles"
+    else
+        log_info "go-pmtiles (pmtiles) not present"
     fi
 }
 
@@ -312,7 +336,7 @@ main() {
     stop_martin
     stop_caddy
     remove_caddy_package
-    remove_unvt_portable
+    remove_niroku_installation
     remove_base_packages
     remove_optional_packages
     remove_node_and_vite
@@ -417,11 +441,7 @@ main() {
     fi
     
     # Remove go-pmtiles CLI
-    log_info "Checking go-pmtiles installation..."
-    if [ -f "/usr/local/bin/pmtiles" ]; then
-        rm -f /usr/local/bin/pmtiles || true
-        log_success "Removed /usr/local/bin/pmtiles"
-    fi
+    remove_go_pmtiles
     
     # Optionally restore tmpfs on /tmp (symmetry with install.sh)
     if [ -t 0 ]; then
