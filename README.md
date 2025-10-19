@@ -46,7 +46,7 @@ sudo ./install.sh
 
 niroku follows the proven [x-24b architecture](https://github.com/unvt/x-24b):
 
-```
+```text
 Web Browser ←→ Caddy (Reverse Proxy) ←→ Martin (PMTiles Server)
 ```
 
@@ -398,6 +398,38 @@ The uninstaller will:
 3. Remove Martin binary from `/usr/local/bin/martin`
 4. Remove Caddy package and repository configuration
 5. Remove Node.js packages and NodeSource repository
+
+## Release v0.1.0 — 2025-10-19
+
+This release contains a small but important refactor to make the installer and uninstaller more maintainable and more robust in the field.
+
+Highlights
+
+- refactor: add a reusable download helper `try_download()` to centralize robust curl downloads and candidate URL attempts
+
+- refactor: add `create_systemd_service()` helper to centralize systemd unit creation, enable and start logic
+
+- refactor: make `uninstall.sh` symmetric with `install.sh` by adding `remove_*` helpers (e.g. `remove_martin`, `remove_caddy`, `remove_go_pmtiles`) so each install step has a clear uninstall counterpart
+
+- feature: lightweight post-install smoke checks to verify service status and basic HTTP responses
+
+Why this matters
+
+- Reduces duplicated code paths and makes future changes safe and easier to audit
+
+- Better logging and clearer failure points when used in automated test harnesses
+
+Compatibility notes
+
+- Raspberry Pi 4/400 (arm64): Full support — prebuilt binaries are used for Martin and other components
+
+- Raspberry Pi Zero W (armv6l): Limited support — Martin prebuilt binaries are not available and must be built from source on-device (see "Building Martin on Raspberry Pi Zero (armv6l)" in Troubleshooting). Docker CE is also not officially supported on armv6l.
+
+Testing
+
+- A basic cycle test (uninstall -> install) was executed on device `m333` (Raspberry Pi 400 / aarch64) as part of this release verification. Logs are available on the device at `/tmp/niroku_install.log` and `/tmp/niroku_uninstall.log`.
+
+If you depend on automatic deployments or CI, consider running the installer in a VM or test device first and reviewing `/tmp/niroku_install.log` after the run.
 6. Remove Docker Engine packages and repository
 7. Remove cloudflared package
 8. Remove tippecanoe (if installed from source)
