@@ -219,6 +219,37 @@ remove_go_pmtiles() {
     fi
 }
 
+# Remove PM11 PMTiles and viewer (if installed)
+remove_pm11() {
+    log_info "Checking PM11 installation..."
+    
+    local PM11_PMTILES_PATH="/opt/niroku/data/pm11.pmtiles"
+    local PM11_VIEWER_DIR="/opt/niroku/data/pm11"
+    local removed=0
+    
+    # Remove pm11.pmtiles file
+    if [ -f "$PM11_PMTILES_PATH" ]; then
+        log_info "Removing pm11.pmtiles..."
+        rm -f "$PM11_PMTILES_PATH" || true
+        log_success "Removed $PM11_PMTILES_PATH"
+        removed=1
+    fi
+    
+    # Remove PM11 viewer directory
+    if [ -d "$PM11_VIEWER_DIR" ]; then
+        log_info "Removing PM11 viewer directory..."
+        rm -rf "$PM11_VIEWER_DIR" || true
+        log_success "Removed $PM11_VIEWER_DIR"
+        removed=1
+    fi
+    
+    if [ "$removed" -eq 0 ]; then
+        log_info "PM11 not installed"
+    else
+        log_success "PM11 cleanup complete"
+    fi
+}
+
 # Remove base packages
 remove_base_packages() {
     log_info "Checking for base packages to remove..."
@@ -442,6 +473,9 @@ main() {
     
     # Remove go-pmtiles CLI
     remove_go_pmtiles
+    
+    # Remove PM11 PMTiles and viewer
+    remove_pm11
     
     # Optionally restore tmpfs on /tmp (symmetry with install.sh)
     if [ -t 0 ]; then
