@@ -761,8 +761,15 @@ install_pm11() {
     fi
     
     if [ ! -f "$PM11_PMTILES_PATH" ]; then
+        # Check if aria2c is available (should be installed via install_dependencies)
+        if ! command -v aria2c >/dev/null 2>&1; then
+            log_error "aria2c is not installed. PM11 requires aria2 for downloading."
+            log_error "Please ensure install_dependencies has been run before install_pm11."
+            return 1
+        fi
+        
         if ! aria2c -x 16 -s 16 -o "$PM11_PMTILES_PATH" "$PM11_URL"; then
-            log_error "Failed to download pm11.pmtiles"
+            log_error "Failed to download pm11.pmtiles from $PM11_URL"
             return 1
         fi
         log_success "Downloaded pm11.pmtiles to $PM11_PMTILES_PATH"
@@ -935,10 +942,22 @@ EOF
     
     # Install dependencies and build
     log_info "Installing npm dependencies for PM11 viewer..."
-    npm install --quiet 2>&1 | grep -v "npm WARN" || true
+    if ! npm install --quiet 2>&1 | grep -v "npm WARN"; then
+        log_error "Failed to install npm dependencies for PM11 viewer"
+        log_error "Check /tmp/niroku_install.log for details"
+        cd /
+        rm -rf "$PM11_TMP_DIR"
+        return 1
+    fi
     
     log_info "Building PM11 viewer with Vite..."
-    npm run build
+    if ! npm run build; then
+        log_error "Failed to build PM11 viewer with Vite"
+        log_error "Check /tmp/niroku_install.log for details"
+        cd /
+        rm -rf "$PM11_TMP_DIR"
+        return 1
+    fi
     
     # Copy built files to destination
     if [ -d "$PM11_VIEWER_DIR" ]; then
