@@ -131,7 +131,7 @@ curl -fsSL https://unvt.github.io/niroku/install.sh | sudo -E PM11=1 bash -
 
 When `PM11=1` is set, the installer will:
 
-1. Download `pm11.pmtiles` (~size varies) from https://tunnel.optgeo.org/pm11.pmtiles to `/opt/niroku/data/pm11.pmtiles`
+1. Download `pm11.pmtiles` (~10GB, size may vary by version) from https://tunnel.optgeo.org/pm11.pmtiles to `/opt/niroku/data/pm11.pmtiles`
 2. Create an interactive map viewer using Vite, MapLibre GL JS, and PMTiles
 3. Install the viewer site at `/opt/niroku/data/pm11/`
 4. Configure the viewer to use the local `/pm11.pmtiles` file

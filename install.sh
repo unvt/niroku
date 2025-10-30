@@ -768,7 +768,7 @@ install_pm11() {
             return 1
         fi
         
-        if ! aria2c -x 16 -s 16 -o "$PM11_PMTILES_PATH" "$PM11_URL"; then
+        if ! aria2c -x 2 -s 2 -o "$PM11_PMTILES_PATH" "$PM11_URL"; then
             log_error "Failed to download pm11.pmtiles from $PM11_URL"
             return 1
         fi
@@ -826,6 +826,7 @@ EOF
     cat > index.js << 'EOF'
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import './index.css';
 import { Protocol } from 'pmtiles';
 
 // Register PMTiles protocol
