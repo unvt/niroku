@@ -263,6 +263,19 @@ remove_fonts_mirror() {
     fi
 }
 
+# Remove locally mirrored sprites (if present)
+remove_sprites_mirror() {
+    local SPRITES_DIR="/opt/niroku/data/sprites"
+    log_info "Checking local sprites mirror..."
+    if [ -d "$SPRITES_DIR" ]; then
+        log_info "Removing local sprites mirror at $SPRITES_DIR..."
+        rm -rf "$SPRITES_DIR" || true
+        log_success "Removed $SPRITES_DIR"
+    else
+        log_info "No local sprites mirror found"
+    fi
+}
+
 # Remove base packages
 remove_base_packages() {
     log_info "Checking for base packages to remove..."
@@ -380,9 +393,10 @@ main() {
     stop_martin
     stop_caddy
     remove_caddy_package
-    # Clean PM11 viewer and local glyph mirror before removing the install dir
+    # Clean PM11 viewer and local asset mirrors before removing the install dir
     remove_pm11
     remove_fonts_mirror
+    remove_sprites_mirror
     remove_niroku_installation
     remove_base_packages
     remove_optional_packages

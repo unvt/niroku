@@ -616,7 +616,7 @@ install_go_pmtiles() {
 
 # Mirror Protomaps Noto Sans glyphs locally (optional)
 mirror_noto_sans_assets() {
-    log_info "Mirroring Protomaps basemaps-assets (fonts) via git clone..."
+    log_info "Mirroring Protomaps basemaps-assets (fonts & sprites) via git clone..."
     if ! command -v git >/dev/null 2>&1; then
         log_error "git is required to mirror fonts. Please ensure install_dependencies has run."
         return 1
@@ -626,6 +626,7 @@ mirror_noto_sans_assets() {
     local TMP_CLONE
     TMP_CLONE=$(mktemp -d -p "$TMP_BASE" niroku_fonts_XXXX)
     local DEST_DIR="$DATA_DIR/fonts"
+    local DEST_SPRITES_DIR="$DATA_DIR/sprites"
 
     # Clone repository shallowly
     if ! git clone --depth 1 "$REPO_URL" "$TMP_CLONE/basemaps-assets"; then
@@ -641,25 +642,47 @@ mirror_noto_sans_assets() {
     fi
 
     mkdir -p "$DATA_DIR"
+    # Fonts
     if [ -d "$DEST_DIR" ]; then
         if [ "${NIROKU_KEEP_EXISTING:-0}" = "1" ]; then
-            log_info "NIROKU_KEEP_EXISTING=1: keeping existing $DEST_DIR (skip mirror)"
-            rm -rf "$TMP_CLONE" 2>/dev/null || true
-            return 0
+            log_info "NIROKU_KEEP_EXISTING=1: keeping existing $DEST_DIR (skip fonts mirror)"
+        else
+            log_info "Removing existing $DEST_DIR for fresh mirror"
+            rm -rf "$DEST_DIR"
         fi
-        log_info "Removing existing $DEST_DIR for fresh mirror"
-        rm -rf "$DEST_DIR"
     fi
 
-    if mv "$TMP_CLONE/basemaps-assets/fonts" "$DEST_DIR"; then
-        log_success "Mirrored fonts to $DEST_DIR"
-        rm -rf "$TMP_CLONE" 2>/dev/null || true
-        return 0
-    else
-        log_warning "Failed to move fonts into $DEST_DIR"
-        rm -rf "$TMP_CLONE" 2>/dev/null || true
-        return 1
+    if [ ! -d "$DEST_DIR" ]; then
+        if mv "$TMP_CLONE/basemaps-assets/fonts" "$DEST_DIR"; then
+            log_success "Mirrored fonts to $DEST_DIR"
+        else
+            log_warning "Failed to move fonts into $DEST_DIR"
+        fi
     fi
+
+    # Sprites (if present)
+    if [ -d "$TMP_CLONE/basemaps-assets/sprites" ]; then
+        if [ -d "$DEST_SPRITES_DIR" ]; then
+            if [ "${NIROKU_KEEP_EXISTING:-0}" = "1" ]; then
+                log_info "NIROKU_KEEP_EXISTING=1: keeping existing $DEST_SPRITES_DIR (skip sprites mirror)"
+            else
+                log_info "Removing existing $DEST_SPRITES_DIR for fresh mirror"
+                rm -rf "$DEST_SPRITES_DIR"
+            fi
+        fi
+        if [ ! -d "$DEST_SPRITES_DIR" ]; then
+            if mv "$TMP_CLONE/basemaps-assets/sprites" "$DEST_SPRITES_DIR"; then
+                log_success "Mirrored sprites to $DEST_SPRITES_DIR"
+            else
+                log_warning "Failed to move sprites into $DEST_SPRITES_DIR"
+            fi
+        fi
+    else
+        log_warning "Cloned repository missing 'sprites' directory (fonts mirrored only)"
+    fi
+
+    rm -rf "$TMP_CLONE" 2>/dev/null || true
+    return 0
 }
 
 # Create QR codes for WiFi connection (if configured)
@@ -892,19 +915,39 @@ EOF
         return 1
     fi
 
-    # If local glyphs are available, rewrite glyphs path in style.json
-    if [ "$USE_LOCAL_GLYPHS" -eq 1 ] && [ -f "$PM11_VIEWER_DIR/style.json" ]; then
+    # If local assets are available, rewrite glyphs/sprite paths in style.json
+    if [ -f "$PM11_VIEWER_DIR/style.json" ]; then
         if command -v jq >/dev/null 2>&1; then
             tmp_style="$TMP_BASE/style.json.tmp"
-            if jq '.glyphs = "/fonts/{fontstack}/{range}.pbf"' "$PM11_VIEWER_DIR/style.json" > "$tmp_style"; then
-                mv "$tmp_style" "$PM11_VIEWER_DIR/style.json"
-                log_info "Rewrote glyphs to local mirror in style.json"
-            else
-                log_warning "Failed to rewrite glyphs with jq; keeping remote glyphs"
-                rm -f "$tmp_style" 2>/dev/null || true
+            cp "$PM11_VIEWER_DIR/style.json" "$tmp_style" || true
+
+            # Rewrite glyphs to local mirror if available
+            if [ "$USE_LOCAL_GLYPHS" -eq 1 ]; then
+                if jq '.glyphs = "/fonts/{fontstack}/{range}.pbf"' "$tmp_style" > "$tmp_style.g"; then
+                    mv "$tmp_style.g" "$tmp_style"
+                    log_info "Rewrote glyphs to local mirror in style.json"
+                else
+                    log_warning "Failed to rewrite glyphs with jq; keeping remote glyphs"
+                    rm -f "$tmp_style.g" 2>/dev/null || true
+                fi
             fi
+
+            # Rewrite sprite to local mirror if sprites directory exists
+            if [ -d "$DATA_DIR/sprites" ]; then
+                if jq 'if (.sprite|type=="string") and (.sprite|test("^https://protomaps\\.github\\.io/basemaps-assets"))
+                      then .sprite = ("/" + (.sprite | sub("^https://protomaps\\.github\\.io/basemaps-assets"; "")))
+                      else . end' "$tmp_style" > "$tmp_style.s"; then
+                    mv "$tmp_style.s" "$tmp_style"
+                    log_info "Rewrote sprite URL to local mirror in style.json"
+                else
+                    log_warning "Failed to rewrite sprite URL with jq; keeping remote sprite"
+                    rm -f "$tmp_style.s" 2>/dev/null || true
+                fi
+            fi
+
+            mv "$tmp_style" "$PM11_VIEWER_DIR/style.json"
         else
-            log_warning "jq not found; cannot rewrite glyphs. Keeping remote glyphs in style.json"
+            log_warning "jq not found; cannot rewrite style.json for local assets. Keeping remote URLs."
         fi
     fi
 
