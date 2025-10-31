@@ -109,7 +109,7 @@ The niroku installer will:
 14. ✅ **Set up configurations**: `martin.yml` (PMTiles paths, web UI) and `Caddyfile` (reverse proxy, CORS)
 15. ✅ **Disable /tmp tmpfs** if present (prevents RAM exhaustion on Raspberry Pi)
 16. ✅ **Generate installation log** at `/tmp/niroku_install.log` for troubleshooting
-17. ✅ **Install PM11 (optional)**: When `PM11=1` is set, downloads pm11.pmtiles (11-country subset) and creates an interactive web viewer accessible at `http://localhost:8080/pm11/`
+17. ✅ **Install PM11 (optional)**: When `PM11=1` is set, downloads pm11.pmtiles (~1.4 GB, 11-country subset) and creates an interactive web viewer accessible at `http://localhost:8080/pm11/`
 
 ## PM11 Feature (Optional)
 
@@ -131,10 +131,15 @@ curl -fsSL https://unvt.github.io/niroku/install.sh | sudo -E PM11=1 bash -
 
 When `PM11=1` is set, the installer will:
 
-1. Download `pm11.pmtiles` (~10GB, size may vary by version) from https://tunnel.optgeo.org/pm11.pmtiles to `/opt/niroku/data/pm11.pmtiles`
+1. Download `pm11.pmtiles` (~1.4 GB) from <https://tunnel.optgeo.org/pm11.pmtiles> to `/opt/niroku/data/pm11.pmtiles`
 2. Create an interactive map viewer using Vite, MapLibre GL JS, and PMTiles
 3. Install the viewer site at `/opt/niroku/data/pm11/`
 4. Configure the viewer to use the local `/pm11.pmtiles` file
+
+Notes:
+
+- The download size is approximately 1.4 GB. On slow or metered connections, consider preloading the file or using a wired connection.
+- Ensure at least 2 GB of free space on the device for the dataset and viewer.
 
 ### Accessing PM11
 
@@ -149,6 +154,7 @@ http://[YOUR_PI_IP]:8080/pm11/
 ```
 
 The viewer provides:
+
 - Interactive map with zoom and pan controls
 - Vector tile rendering using MapLibre GL JS
 - Layers: water, transportation, buildings, and place labels
