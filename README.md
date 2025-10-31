@@ -106,10 +106,10 @@ The niroku installer will:
 11. ✅ **Install go-pmtiles** (PMTiles CLI tool, v1.18.0)
 12. ✅ **Create installation directory** at `/opt/niroku` with data subdirectory
 13. ✅ **Configure services**: Both Caddy and Martin run as systemd services with automatic restart
-14. ✅ **Set up configurations**: `martin.yml` (PMTiles paths, web UI) and `Caddyfile` (reverse proxy, CORS)
+14. ✅ **Set up configurations**: `martin.yml` (PMTiles paths, web UI, base_path: `/martin`) and `Caddyfile` (reverse proxy, CORS; forwards `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Port`, and `Host`)
 15. ✅ **Disable /tmp tmpfs** if present (prevents RAM exhaustion on Raspberry Pi)
 16. ✅ **Generate installation log** at `/tmp/niroku_install.log` for troubleshooting
-17. ✅ **Install PM11 (optional)**: When `PM11=1` is set, downloads pm11.pmtiles (~1.4 GB, 11-country subset) and creates an interactive web viewer accessible at `http://localhost:8080/pm11/`
+17. ✅ **Install PM11 (optional)**: When `PM11=1` is set, downloads pm11.pmtiles (~1.4 GB, 11-country subset) and creates an interactive web viewer accessible at `http://localhost/pm11/`
 18. ✅ **Mirror assets (default with PM11)**: When `PM11=1` is set, the installer mirrors Protomaps basemaps assets (fonts and sprites) by default for offline use
 
 ## PM11 Feature (Optional)
@@ -149,12 +149,12 @@ curl -fsSL https://unvt.github.io/niroku/install.sh | sudo -E NIROKU_MIRROR_ASSE
 What this does:
 
 - Clones the Protomaps basemaps assets repo ([protomaps/basemaps-assets](https://github.com/protomaps/basemaps-assets)) and copies:
-   - fonts PBFs to `/opt/niroku/data/fonts`
-   - sprites (v4) to `/opt/niroku/data/sprites`
+  - fonts PBFs to `/opt/niroku/data/fonts`
+  - sprites (v4) to `/opt/niroku/data/sprites`
 - Rewrites the PM11 viewer `style.json` so it prefers local cache:
-   - `sources.protomaps.url` → `/martin/pm11`
-   - `glyphs` → `/fonts/{fontstack}/{range}.pbf` if local fonts exist, otherwise remote Protomaps URL
-   - `sprite` → `/sprites/v4/light` if local sprites exist, otherwise remote Protomaps URL
+  - `sources.protomaps.url` → `/martin/pm11`
+  - `glyphs` → `/fonts/{fontstack}/{range}.pbf` if local fonts exist, otherwise remote Protomaps URL
+  - `sprite` → `/sprites/v4/light` if local sprites exist, otherwise remote Protomaps URL
 
 Notes:
 
@@ -183,10 +183,10 @@ After installation with PM11:
 
 ```bash
 # Access the PM11 viewer
-http://localhost:8080/pm11/
+http://localhost/pm11/
 
 # Or from another device on the network
-http://[YOUR_PI_IP]:8080/pm11/
+http://[YOUR_PI_IP]/pm11/
 ```
 
 The viewer provides:
@@ -211,61 +211,71 @@ This will remove both `/opt/niroku/data/pm11.pmtiles` and `/opt/niroku/data/pm11
 After installation completes:
 
 1. **Access the web interface**:
-   
-   ```bash
-   # Find your Raspberry Pi's IP address
-   hostname -I
-   
-   # Access via web browser at:
-   # http://[YOUR_IP_ADDRESS]:8080
-   # Martin tile server at:
-   # http://[YOUR_IP_ADDRESS]:8080/martin
-   ```
 
-2. **Add your map data**:
-   - Place PMTiles files in `/opt/niroku/data`
-   - Martin will automatically detect and serve them
-   - Access tiles at: `http://[YOUR_IP]:8080/martin/[filename]/{z}/{x}/{y}`
+```bash
+# Find your Raspberry Pi's IP address
+hostname -I
 
-3. **Manage services**:
-   
-   ```bash
-   # Check service status
-   systemctl status martin
-   systemctl status caddy-niroku
-   
-   # View logs
-   journalctl -u martin -f
-   journalctl -u caddy-niroku -f
-   
-   # Restart services
-   systemctl restart martin caddy-niroku
-   ```
+# Access via web browser at:
+# http://[YOUR_IP_ADDRESS]
+# Martin tile server at:
+# http://[YOUR_IP_ADDRESS]/martin
+```
 
-4. **Configure WiFi Access Point** (optional):
-   - Refer to the [UNVT Portable WiFi setup guide](https://github.com/unvt/portable/wiki)
-   - Generate QR codes using the installed `qrencode` tool
+Verify TileJSON URLs include the `/martin` prefix:
 
-5. **Use installed tools**:
-   
-   ```bash
-   # Check installed versions
-   node --version           # Node.js LTS
-   npm --version
-   vite --version
-   docker --version         # Docker Engine
-   cloudflared --version    # Cloudflare Tunnel
-   tippecanoe --version     # Vector tile tool
-   pmtiles --version        # PMTiles CLI
-   martin --version         # Tile server
-   caddy version            # Web server
-   
-   # Example: Convert GeoJSON to PMTiles
-   tippecanoe -o output.pmtiles input.geojson
-   
-   # Example: Inspect PMTiles metadata
-   pmtiles show /opt/niroku/data/yourfile.pmtiles
-   ```
+```bash
+# Replace [SOURCE] with your PMTiles source name (e.g., pm11)
+curl -fsSL http://[YOUR_IP_ADDRESS]/martin/[SOURCE] | jq '.tiles[0]'
+# Expected: a URL containing "/martin/", e.g. "http://[YOUR_IP_ADDRESS]/martin/[SOURCE]/{z}/{x}/{y}"
+```
+
+1. **Add your map data**:
+
+Place PMTiles files in `/opt/niroku/data`. Martin will automatically detect and serve them.
+
+Access tiles at: `http://[YOUR_IP]/martin/[filename]/{z}/{x}/{y}`
+
+1. **Manage services**:
+
+```bash
+# Check service status
+systemctl status martin
+systemctl status caddy-niroku
+
+# View logs
+journalctl -u martin -f
+journalctl -u caddy-niroku -f
+
+# Restart services
+systemctl restart martin caddy-niroku
+```
+
+1. **Configure WiFi Access Point** (optional):
+
+- Refer to the [UNVT Portable WiFi setup guide](https://github.com/unvt/portable/wiki)
+- Generate QR codes using the installed `qrencode` tool
+
+1. **Use installed tools**:
+
+```bash
+# Check installed versions
+node --version           # Node.js LTS
+npm --version
+vite --version
+docker --version         # Docker Engine
+cloudflared --version    # Cloudflare Tunnel
+tippecanoe --version     # Vector tile tool
+pmtiles --version        # PMTiles CLI
+martin --version         # Tile server
+caddy version            # Web server
+
+# Example: Convert GeoJSON to PMTiles
+tippecanoe -o output.pmtiles input.geojson
+
+# Example: Inspect PMTiles metadata
+pmtiles show /opt/niroku/data/yourfile.pmtiles
+```
 
 ## Environment Variables
 
@@ -299,6 +309,15 @@ sudo PM11=1 ./install.sh
 # Example: Install with PM11 but disable assets mirroring
 sudo NIROKU_MIRROR_ASSETS=0 PM11=1 ./install.sh
 ```
+
+## Reverse Proxy and URL Prefix
+
+- Martin runs behind Caddy at `http://[YOUR_IP]/martin`.
+- Martin configuration sets `base_path: /martin` so that TileJSON URLs always include the `/martin` prefix.
+- Caddy strips `/martin` and proxies to `127.0.0.1:3000`, forwarding these headers upstream:
+      - `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Port`, and `Host`.
+- You do not need `X-Rewrite-URL` because `base_path` is used.
+- To verify, fetch a TileJSON and check that `.tiles[0]` includes `/martin/`.
 
 ## Security Considerations
 
@@ -423,11 +442,11 @@ expect -c 'set timeout 1200; spawn ssh -o StrictHostKeyChecking=accept-new -o Co
 
 Use these only for temporary testing harnesses. Do not hard-code credentials or expose them in production documentation.
 
-### Port 8080 already in use
+### Port 80 already in use
 
 ```bash
-# Check what's using port 8080
-sudo lsof -i :8080
+# Check what's using port 80
+sudo lsof -i :80
 
 # Stop conflicting service if needed
 sudo systemctl stop [service-name]

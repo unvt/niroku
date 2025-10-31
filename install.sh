@@ -534,7 +534,7 @@ configure_caddy() {
     
     # Create Caddyfile
     cat > "$INSTALL_DIR/Caddyfile" << 'EOF'
-:8080 {
+:80 {
     # Serve static files from the data folder
     root * /opt/niroku/data
     file_server
@@ -749,19 +749,19 @@ display_summary() {
     
     if [ -n "$PRIMARY_IP" ] && [ "$PRIMARY_IP" != "127.0.0.1" ]; then
         echo "  2. Access the web interface at:"
-        echo "     - http://localhost:8080"
-        echo "     - http://$PRIMARY_IP:8080"
+        echo "     - http://localhost"
+        echo "     - http://$PRIMARY_IP"
         
         if [[ "$MARTIN_SUPPORTED" == "true" ]] && command -v martin >/dev/null 2>&1; then
             echo "  3. Access Martin tile server at:"
-            echo "     - http://localhost:8080/martin"
-            echo "     - http://$PRIMARY_IP:8080/martin"
+            echo "     - http://localhost/martin"
+            echo "     - http://$PRIMARY_IP/martin"
         fi
     else
-        echo "  2. Access the web interface at http://localhost:8080"
+        echo "  2. Access the web interface at http://localhost"
         
         if [[ "$MARTIN_SUPPORTED" == "true" ]] && command -v martin >/dev/null 2>&1; then
-            echo "  3. Access Martin tile server at http://localhost:8080/martin"
+            echo "  3. Access Martin tile server at http://localhost/martin"
         fi
     fi
     
@@ -811,12 +811,12 @@ post_install_smoke_checks() {
         log_warning "Caddy-niroku service not found"
     fi
 
-    # Quick HTTP check for Caddy root (localhost:8080)
+    # Quick HTTP check for Caddy root (localhost)
     if command -v curl >/dev/null 2>&1; then
-        if curl -s --max-time 5 http://127.0.0.1:8080/ >/dev/null 2>&1; then
-            log_info "Caddy responded on http://127.0.0.1:8080/"
+        if curl -s --max-time 5 http://127.0.0.1/ >/dev/null 2>&1; then
+            log_info "Caddy responded on http://127.0.0.1/"
         else
-            log_warning "No HTTP response from Caddy on http://127.0.0.1:8080/ (this may be expected until files are placed in $DATA_DIR)"
+            log_warning "No HTTP response from Caddy on http://127.0.0.1/ (this may be expected until files are placed in $DATA_DIR)"
         fi
     fi
 
@@ -1110,7 +1110,7 @@ EOF
     rm -rf "$PM11_TMP_DIR"
     
     log_success "PM11 viewer installed at $PM11_VIEWER_DIR"
-    log_info "Access PM11 viewer at: http://localhost:8080/pm11/"
+    log_info "Access PM11 viewer at: http://localhost/pm11/"
 }
 
 
@@ -1176,12 +1176,12 @@ post_install_smoke_checks() {
         log_warning "Caddy-niroku service not found"
     fi
 
-    # Quick HTTP check for Caddy root (localhost:8080)
+    # Quick HTTP check for Caddy root (localhost)
     if command -v curl >/dev/null 2>&1; then
-        if curl -s --max-time 5 http://127.0.0.1:8080/ >/dev/null 2>&1; then
-            log_info "Caddy responded on http://127.0.0.1:8080/"
+        if curl -s --max-time 5 http://127.0.0.1/ >/dev/null 2>&1; then
+            log_info "Caddy responded on http://127.0.0.1/"
         else
-            log_warning "No HTTP response from Caddy on http://127.0.0.1:8080/ (this may be expected until files are placed in $DATA_DIR)"
+            log_warning "No HTTP response from Caddy on http://127.0.0.1/ (this may be expected until files are placed in $DATA_DIR)"
         fi
     fi
 

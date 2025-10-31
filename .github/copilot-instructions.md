@@ -11,7 +11,7 @@
 - **Architecture detection**: Always detect architecture using `uname -m` and `dpkg --print-architecture`
 - **Compatibility flags**: Use `MARTIN_SUPPORTED` and `DOCKER_SUPPORTED` flags to skip incompatible components on armv6l
 - **Clear warnings**: When skipping components, provide clear warnings with workarounds or alternatives
- - **Service layout**: Run Martin on `127.0.0.1:3000` behind Caddy on `:8080`; enable Martin Web UI for all users
+ - **Service layout**: Run Martin on `127.0.0.1:3000` behind Caddy on `:80`; enable Martin Web UI for all users
 
 ## Installation Patterns
 
@@ -28,7 +28,7 @@
 	- Pass upstream headers: `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Port`, and `Host`.
 	- `X-Forwarded-Prefix` is optional and not used by Martin when `base_path` is set.
 	- Only use `X-Rewrite-URL` if you do not set `base_path` (not recommended here).
- - **Verification**: After install, `curl http://<host>:8080/martin/<source> | jq '.tiles[0]'` should include `/martin/` in the URL.
+ - **Verification**: After install, `curl http://<host>/martin/<source> | jq '.tiles[0]'` should include `/martin/` in the URL.
 
 ## Package Management
 
