@@ -846,6 +846,15 @@ install_pm11() {
             return 1
         fi
         log_success "Downloaded pm11.pmtiles to $PM11_PMTILES_PATH"
+        # Restart Martin so it re-scans /opt/niroku/data and recognizes the new PMTiles
+        if [[ "$MARTIN_SUPPORTED" == "true" ]] && systemctl list-unit-files martin.service >/dev/null 2>&1; then
+            log_info "Restarting Martin to load new PMTiles (pm11.pmtiles)..."
+            if systemctl restart martin; then
+                log_success "Martin restarted"
+            else
+                log_warning "Failed to restart Martin; pm11 may not be visible until Martin is restarted manually"
+            fi
+        fi
     fi
     
     # Optionally mirror local glyphs (Noto Sans) for offline use
