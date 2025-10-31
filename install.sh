@@ -614,6 +614,54 @@ install_go_pmtiles() {
     log_success "go-pmtiles installed as pmtiles"
 }
 
+# Mirror Protomaps Noto Sans glyphs locally (optional)
+mirror_noto_sans_assets() {
+    log_info "Mirroring Protomaps basemaps-assets (fonts) via git clone..."
+    if ! command -v git >/dev/null 2>&1; then
+        log_error "git is required to mirror fonts. Please ensure install_dependencies has run."
+        return 1
+    fi
+
+    local REPO_URL="https://github.com/protomaps/basemaps-assets.git"
+    local TMP_CLONE
+    TMP_CLONE=$(mktemp -d -p "$TMP_BASE" niroku_fonts_XXXX)
+    local DEST_DIR="$DATA_DIR/fonts"
+
+    # Clone repository shallowly
+    if ! git clone --depth 1 "$REPO_URL" "$TMP_CLONE/basemaps-assets"; then
+        log_warning "Failed to clone $REPO_URL"
+        rm -rf "$TMP_CLONE" 2>/dev/null || true
+        return 1
+    fi
+
+    if [ ! -d "$TMP_CLONE/basemaps-assets/fonts" ]; then
+        log_warning "Cloned repository missing 'fonts' directory"
+        rm -rf "$TMP_CLONE" 2>/dev/null || true
+        return 1
+    fi
+
+    mkdir -p "$DATA_DIR"
+    if [ -d "$DEST_DIR" ]; then
+        if [ "${NIROKU_KEEP_EXISTING:-0}" = "1" ]; then
+            log_info "NIROKU_KEEP_EXISTING=1: keeping existing $DEST_DIR (skip mirror)"
+            rm -rf "$TMP_CLONE" 2>/dev/null || true
+            return 0
+        fi
+        log_info "Removing existing $DEST_DIR for fresh mirror"
+        rm -rf "$DEST_DIR"
+    fi
+
+    if mv "$TMP_CLONE/basemaps-assets/fonts" "$DEST_DIR"; then
+        log_success "Mirrored fonts to $DEST_DIR"
+        rm -rf "$TMP_CLONE" 2>/dev/null || true
+        return 0
+    else
+        log_warning "Failed to move fonts into $DEST_DIR"
+        rm -rf "$TMP_CLONE" 2>/dev/null || true
+        return 1
+    fi
+}
+
 # Create QR codes for WiFi connection (if configured)
 generate_qr_codes() {
     log_info "QR code generation can be done after WiFi AP configuration."
@@ -777,6 +825,16 @@ install_pm11() {
         log_success "Downloaded pm11.pmtiles to $PM11_PMTILES_PATH"
     fi
     
+    # Optionally mirror local glyphs (Noto Sans) for offline use
+    USE_LOCAL_GLYPHS=0
+    if [ "${NIROKU_MIRROR_FONTS:-0}" = "1" ]; then
+        if mirror_noto_sans_assets; then
+            USE_LOCAL_GLYPHS=1
+        else
+            log_warning "Local glyph mirror incomplete; using remote glyphs."
+        fi
+    fi
+
     # Create PM11 viewer site using Vite
     log_info "Creating PM11 viewer site..."
     PM11_VIEWER_DIR="$DATA_DIR/pm11"
@@ -824,7 +882,33 @@ EOF
 </html>
 EOF
     
-    # Create index.js (based on pm11 repo, modified to use local pmtiles and Protomaps assets)
+    # Download style.json from project website to the PM11 folder
+    STYLE_URL="https://unvt.github.io/niroku/style.json"
+    log_info "Downloading style.json for MapLibre..."
+    if ! aria2c -x 2 -s 2 -d "$PM11_VIEWER_DIR" -o "style.json" "$STYLE_URL"; then
+        log_error "Failed to download style.json from $STYLE_URL"
+        cd /
+        rm -rf "$PM11_TMP_DIR"
+        return 1
+    fi
+
+    # If local glyphs are available, rewrite glyphs path in style.json
+    if [ "$USE_LOCAL_GLYPHS" -eq 1 ] && [ -f "$PM11_VIEWER_DIR/style.json" ]; then
+        if command -v jq >/dev/null 2>&1; then
+            tmp_style="$TMP_BASE/style.json.tmp"
+            if jq '.glyphs = "/fonts/{fontstack}/{range}.pbf"' "$PM11_VIEWER_DIR/style.json" > "$tmp_style"; then
+                mv "$tmp_style" "$PM11_VIEWER_DIR/style.json"
+                log_info "Rewrote glyphs to local mirror in style.json"
+            else
+                log_warning "Failed to rewrite glyphs with jq; keeping remote glyphs"
+                rm -f "$tmp_style" 2>/dev/null || true
+            fi
+        else
+            log_warning "jq not found; cannot rewrite glyphs. Keeping remote glyphs in style.json"
+        fi
+    fi
+
+    # Create index.js (based on pm11 repo), referencing external style.json
     cat > index.js << 'EOF'
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -837,80 +921,14 @@ maplibregl.addProtocol('pmtiles', protocol.tile);
 
 // Initialize map
 const map = new maplibregl.Map({
-    container: 'map',
-    // Use local system fonts for CJK ideographs on the client device
-    // (works even if glyphs do not include CJK). This is a CSS font-family list.
-    localIdeographFontFamily: 'Noto Sans CJK JP, Noto Sans JP, Hiragino Sans, Hiragino Kaku Gothic ProN, Meiryo, PingFang SC, Apple SD Gothic Neo, Noto Sans CJK SC, Noto Sans CJK TC, sans-serif',
-    style: {
-        version: 8,
-        // Use Protomaps Basemaps assets for SDF glyphs (Latin, symbols)
-        glyphs: 'https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf',
-        sources: {
-            pm11: {
-                type: 'vector',
-                url: 'pmtiles:///pm11.pmtiles',
-                attribution: '<a href="https://github.com/hfu/pm11">PM11</a>'
-            }
-        },
-        layers: [
-            {
-                id: 'background',
-                type: 'background',
-                paint: {
-                    'background-color': '#f0f0f0'
-                }
-            },
-            {
-                id: 'water',
-                type: 'fill',
-                source: 'pm11',
-                'source-layer': 'water',
-                paint: {
-                    'fill-color': '#80deea'
-                }
-            },
-            {
-                id: 'transportation',
-                type: 'line',
-                source: 'pm11',
-                'source-layer': 'transportation',
-                paint: {
-                    'line-color': '#ffa726',
-                    'line-width': 1
-                }
-            },
-            {
-                id: 'building',
-                type: 'fill',
-                source: 'pm11',
-                'source-layer': 'building',
-                paint: {
-                    'fill-color': '#bdbdbd',
-                    'fill-opacity': 0.7
-                }
-            },
-            {
-                id: 'place_label',
-                type: 'symbol',
-                source: 'pm11',
-                'source-layer': 'place',
-                layout: {
-                    'text-field': ['get', 'name'],
-                    'text-size': 12,
-                        // Use Noto Sans glyphs from Protomaps basemaps-assets for Latin; CJK falls back to local fonts
-                        // Protomaps provides fonts named e.g. "Noto Sans Regular", "Noto Sans Medium", "Noto Sans Italic"
-                        'text-font': ['Noto Sans Regular']
-                },
-                paint: {
-                    'text-color': '#333',
-                    'text-halo-color': '#fff',
-                    'text-halo-width': 1
-                }
-            }
-        ]
-    },
-    center: [0, 0],
-    zoom: 2
+  container: 'map',
+  // Use local system fonts for CJK ideographs on the client device
+  // (works even if glyphs do not include CJK). This is a CSS font-family list.
+  localIdeographFontFamily: 'Noto Sans CJK JP, Noto Sans JP, Hiragino Sans, Hiragino Kaku Gothic ProN, Meiryo, PingFang SC, Apple SD Gothic Neo, Noto Sans CJK SC, Noto Sans CJK TC, sans-serif',
+  // Load external style generated/hosted by niroku
+  style: 'style.json',
+  center: [0, 0],
+  zoom: 2
 });
 
 map.addControl(new maplibregl.NavigationControl());
