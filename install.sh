@@ -560,6 +560,8 @@ configure_caddy() {
             header_up X-Forwarded-Proto "http"
             header_up X-Forwarded-Host {host}
             header_up X-Forwarded-Port "8080"
+            # Tell upstream (Martin) that it is served under /martin
+            header_up X-Forwarded-Prefix "/martin"
         }
     }
 }
