@@ -110,6 +110,7 @@ The niroku installer will:
 15. ✅ **Disable /tmp tmpfs** if present (prevents RAM exhaustion on Raspberry Pi)
 16. ✅ **Generate installation log** at `/tmp/niroku_install.log` for troubleshooting
 17. ✅ **Install PM11 (optional)**: When `PM11=1` is set, downloads pm11.pmtiles (~1.4 GB, 11-country subset) and creates an interactive web viewer accessible at `http://localhost:8080/pm11/`
+18. ✅ **Mirror assets (default with PM11)**: When `PM11=1` is set, the installer mirrors Protomaps basemaps assets (fonts and sprites) by default for offline use
 
 ## PM11 Feature (Optional)
 
@@ -126,6 +127,41 @@ sudo PM11=1 ./install.sh
 # Or using one-line install
 curl -fsSL https://unvt.github.io/niroku/install.sh | sudo -E PM11=1 bash -
 ```
+
+### Offline assets (fonts and sprites) for PM11
+
+By default, when you enable PM11 (`PM11=1`), niroku mirrors basemaps assets so the viewer can run offline. You can also control this explicitly:
+
+```bash
+# Install niroku with PM11 (assets mirroring is ON by default)
+sudo PM11=1 ./install.sh
+
+# Disable mirroring explicitly
+sudo NIROKU_MIRROR_ASSETS=0 PM11=1 ./install.sh
+
+# Force enable mirroring explicitly
+sudo NIROKU_MIRROR_ASSETS=1 PM11=1 ./install.sh
+
+# One-line (with explicit enable)
+curl -fsSL https://unvt.github.io/niroku/install.sh | sudo -E NIROKU_MIRROR_ASSETS=1 PM11=1 bash -
+```
+
+What this does:
+
+- Clones the Protomaps basemaps assets repo ([protomaps/basemaps-assets](https://github.com/protomaps/basemaps-assets)) and copies:
+   - fonts PBFs to `/opt/niroku/data/fonts`
+   - sprites (v4) to `/opt/niroku/data/sprites`
+- Rewrites the PM11 viewer `style.json` so it prefers local cache:
+   - `sources.protomaps.url` → `/martin/pm11`
+   - `glyphs` → `/fonts/{fontstack}/{range}.pbf` if local fonts exist, otherwise remote Protomaps URL
+   - `sprite` → `/sprites/v4/light` if local sprites exist, otherwise remote Protomaps URL
+
+Notes:
+
+- When `PM11=1` and you did not set any mirroring flags, niroku defaults to `NIROKU_MIRROR_ASSETS=1`.
+- Asset mirroring flag is `NIROKU_MIRROR_ASSETS`. For backward compatibility, `NIROKU_MIRROR_FONTS=1` also enables assets mirroring.
+- If you set the flag but mirroring fails (e.g., network issue), the installer keeps remote URLs to avoid 404s.
+- Uninstaller removes `/opt/niroku/data/fonts` and `/opt/niroku/data/sprites` for symmetry.
 
 ### What PM11 Installs
 
@@ -245,14 +281,23 @@ export NIROKU_KEEP_EXISTING=1
 # Install PM11 (11-country planet.pmtiles subset) and viewer
 export PM11=1
 
+# Mirror basemaps assets (fonts + sprites)
+# Default: enabled when PM11=1 (set NIROKU_MIRROR_ASSETS=0 to disable)
+export NIROKU_MIRROR_ASSETS=1
+# Backward-compatible alias (also enables asset mirroring when set to 1)
+export NIROKU_MIRROR_FONTS=1
+
 # Example: Full non-interactive install (overwrites existing by default)
 sudo NIROKU_FORCE_OS=1 ./install.sh
 
 # Example: Non-interactive install that keeps existing installation
 sudo NIROKU_FORCE_OS=1 NIROKU_KEEP_EXISTING=1 ./install.sh
 
-# Example: Install with PM11 feature
+# Example: Install with PM11 feature (mirroring ON by default)
 sudo PM11=1 ./install.sh
+
+# Example: Install with PM11 but disable assets mirroring
+sudo NIROKU_MIRROR_ASSETS=0 PM11=1 ./install.sh
 ```
 
 ## Security Considerations

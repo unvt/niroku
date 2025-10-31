@@ -491,6 +491,8 @@ pmtiles:
     - /opt/niroku/data
 web_ui: enable-for-all
 listen_addresses: "127.0.0.1:3000"
+# When running behind a reverse proxy at /martin, make Martin generate URLs with this prefix
+base_url: "/martin"
 # CORS is disabled here because it's handled by Caddy to avoid duplicate headers
 cors: false
 EOF
@@ -512,6 +514,15 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
+
+    # Ensure Martin picks up the latest configuration
+    if systemctl list-unit-files martin.service >/dev/null 2>&1; then
+        if systemctl restart martin >/dev/null 2>&1; then
+            log_info "Restarted Martin to apply configuration (base_url=/martin)"
+        else
+            log_warning "Could not restart Martin; it may need a manual restart to apply base_url"
+        fi
+    fi
 
     log_success "Martin configured (systemd unit created)"
 }
@@ -815,6 +826,12 @@ install_pm11() {
     fi
     
     log_info "Installing PM11 PMTiles and viewer..."
+
+    # Default behavior: when PM11=1, enable assets mirroring unless user explicitly set a value
+    if [ -z "${NIROKU_MIRROR_ASSETS+x}" ] && [ -z "${NIROKU_MIRROR_FONTS+x}" ]; then
+        export NIROKU_MIRROR_ASSETS=1
+        log_info "Defaulting NIROKU_MIRROR_ASSETS=1 because PM11=1 (set NIROKU_MIRROR_ASSETS=0 to disable)"
+    fi
     
     # Download pm11.pmtiles to /opt/niroku/data/
     log_info "Downloading pm11.pmtiles (~1.4 GB, this may take a while)..."
