@@ -857,13 +857,13 @@ install_pm11() {
         fi
     fi
     
-    # Optionally mirror local glyphs (Noto Sans) for offline use
-    USE_LOCAL_GLYPHS=0
-    if [ "${NIROKU_MIRROR_FONTS:-0}" = "1" ]; then
+    # Optionally mirror assets (fonts & sprites) for offline use
+    USE_LOCAL_ASSETS=0
+    if [ "${NIROKU_MIRROR_ASSETS:-${NIROKU_MIRROR_FONTS:-0}}" = "1" ]; then
         if mirror_noto_sans_assets; then
-            USE_LOCAL_GLYPHS=1
+            USE_LOCAL_ASSETS=1
         else
-            log_warning "Local glyph mirror incomplete; using remote glyphs."
+            log_warning "Local assets mirror incomplete; will use remote assets where needed."
         fi
     fi
 
@@ -925,39 +925,62 @@ EOF
         return 1
     fi
 
-    # If local assets are available, rewrite glyphs/sprite paths in style.json (in temp path)
+    # Rewrites for source URL, glyphs, and sprite in style.json (in temp path)
     if [ -f "$STYLE_PATH" ]; then
         if command -v jq >/dev/null 2>&1; then
             tmp_style="$TMP_BASE/style.json.tmp"
             cp "$STYLE_PATH" "$tmp_style" || true
 
-            # Rewrite glyphs to local mirror if available
-            if [ "$USE_LOCAL_GLYPHS" -eq 1 ]; then
+            # 1) Always point the vector source at local Martin
+            if jq '.sources |= (.protomaps.url = "/martin/pm11" | .)' "$tmp_style" > "$tmp_style.1"; then
+                mv "$tmp_style.1" "$tmp_style"
+                log_info "Set sources.protomaps.url to /martin/pm11"
+            else
+                log_warning "Failed to set sources.protomaps.url; keeping original"
+                rm -f "$tmp_style.1" 2>/dev/null || true
+            fi
+
+            # 2) Glyphs: prefer local if fonts are mirrored, otherwise ensure remote
+            if [ -d "$DATA_DIR/fonts" ]; then
                 if jq '.glyphs = "/fonts/{fontstack}/{range}.pbf"' "$tmp_style" > "$tmp_style.g"; then
                     mv "$tmp_style.g" "$tmp_style"
-                    log_info "Rewrote glyphs to local mirror in style.json"
+                    log_info "Set glyphs to local /fonts/ path"
                 else
-                    log_warning "Failed to rewrite glyphs with jq; keeping remote glyphs"
+                    log_warning "Failed to set local glyphs; keeping existing glyphs URL"
+                    rm -f "$tmp_style.g" 2>/dev/null || true
+                fi
+            else
+                if jq '.glyphs = "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf"' "$tmp_style" > "$tmp_style.g"; then
+                    mv "$tmp_style.g" "$tmp_style"
+                    log_info "Set glyphs to remote Protomaps URL (no local fonts found)"
+                else
+                    log_warning "Failed to set remote glyphs URL; keeping existing"
                     rm -f "$tmp_style.g" 2>/dev/null || true
                 fi
             fi
 
-            # Rewrite sprite to local mirror if sprites directory exists
+            # 3) Sprite: prefer local if sprites are mirrored, otherwise ensure remote
             if [ -d "$DATA_DIR/sprites" ]; then
-                if jq 'if (.sprite|type=="string") and (.sprite|test("^https://protomaps\\.github\\.io/basemaps-assets"))
-                      then .sprite = ("/" + (.sprite | sub("^https://protomaps\\.github\\.io/basemaps-assets"; "")))
-                      else . end' "$tmp_style" > "$tmp_style.s"; then
+                if jq '.sprite = "/sprites/v4/light"' "$tmp_style" > "$tmp_style.s"; then
                     mv "$tmp_style.s" "$tmp_style"
-                    log_info "Rewrote sprite URL to local mirror in style.json"
+                    log_info "Set sprite to local /sprites/v4/light"
                 else
-                    log_warning "Failed to rewrite sprite URL with jq; keeping remote sprite"
+                    log_warning "Failed to set local sprite; keeping existing sprite URL"
+                    rm -f "$tmp_style.s" 2>/dev/null || true
+                fi
+            else
+                if jq '.sprite = "https://protomaps.github.io/basemaps-assets/sprites/v4/light"' "$tmp_style" > "$tmp_style.s"; then
+                    mv "$tmp_style.s" "$tmp_style"
+                    log_info "Set sprite to remote Protomaps URL (no local sprites found)"
+                else
+                    log_warning "Failed to set remote sprite URL; keeping existing"
                     rm -f "$tmp_style.s" 2>/dev/null || true
                 fi
             fi
 
             mv "$tmp_style" "$STYLE_PATH"
         else
-            log_warning "jq not found; cannot rewrite style.json for local assets. Keeping remote URLs."
+            log_warning "jq not found; cannot rewrite style.json for local assets. Keeping original URLs."
         fi
     fi
 
