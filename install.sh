@@ -484,15 +484,33 @@ configure_martin() {
         return 0
     fi
     
+    # Determine a public URL so Martin generates correct TileJSON links under /martin
+    PROXY_PREFIX="/martin"
+    PRIMARY_IP=""
+    if command -v ip &> /dev/null; then
+        PRIMARY_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' | head -1)
+    fi
+    if [ -z "$PRIMARY_IP" ]; then
+        PRIMARY_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+    fi
+    if [ -n "${NIROKU_PUBLIC_URL:-}" ]; then
+        PUBLIC_URL="$NIROKU_PUBLIC_URL$PROXY_PREFIX"
+    elif [ -n "$PRIMARY_IP" ] && [ "$PRIMARY_IP" != "127.0.0.1" ]; then
+        PUBLIC_URL="http://$PRIMARY_IP:8080$PROXY_PREFIX"
+    else
+        PUBLIC_URL="http://localhost:8080$PROXY_PREFIX"
+    fi
+    log_info "Martin public_url set to $PUBLIC_URL"
+
     # Create martin.yml configuration
-    cat > "$INSTALL_DIR/martin.yml" << 'EOF'
+    cat > "$INSTALL_DIR/martin.yml" << EOF
 pmtiles:
   paths:
     - /opt/niroku/data
 web_ui: enable-for-all
 listen_addresses: "127.0.0.1:3000"
-# When running behind a reverse proxy at /martin, make Martin generate URLs with this prefix
-base_url: "/martin"
+# Make Martin generate absolute URLs with this public base (behind Caddy at /martin)
+public_url: "$PUBLIC_URL"
 # CORS is disabled here because it's handled by Caddy to avoid duplicate headers
 cors: false
 EOF
@@ -557,9 +575,12 @@ configure_caddy() {
         
         uri strip_prefix /martin
         reverse_proxy localhost:3000 {
-            header_up X-Forwarded-Proto "http"
-            header_up X-Forwarded-Host {host}
-            header_up X-Forwarded-Port "8080"
+            # Preserve original request scheme/host/port for upstream URL generation
+            header_up X-Forwarded-Proto {http.request.scheme}
+            header_up X-Forwarded-Host {http.request.host}
+            header_up X-Forwarded-Port {http.request.port}
+            # Also set Host to the original host:port for apps that rely on it
+            header_up Host {http.request.hostport}
             # Tell upstream (Martin) that it is served under /martin
             header_up X-Forwarded-Prefix "/martin"
         }
