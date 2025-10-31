@@ -768,7 +768,9 @@ install_pm11() {
             return 1
         fi
         
-        if ! aria2c -x 2 -s 2 -o "$PM11_PMTILES_PATH" "$PM11_URL"; then
+        # Use -d to set the destination directory explicitly to avoid creating a relative path under $HOME
+        # Some aria2c versions treat -o with slashes as a relative path from CWD
+        if ! aria2c -x 2 -s 2 -d "$DATA_DIR" -o "pm11.pmtiles" "$PM11_URL"; then
             log_error "Failed to download pm11.pmtiles from $PM11_URL"
             return 1
         fi
@@ -822,7 +824,7 @@ EOF
 </html>
 EOF
     
-    # Create index.js (based on pm11 repo, modified to use local pmtiles)
+    # Create index.js (based on pm11 repo, modified to use local pmtiles and Protomaps assets)
     cat > index.js << 'EOF'
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -835,72 +837,79 @@ maplibregl.addProtocol('pmtiles', protocol.tile);
 
 // Initialize map
 const map = new maplibregl.Map({
-  container: 'map',
-  style: {
-    version: 8,
-    sources: {
-      pm11: {
-        type: 'vector',
-        url: 'pmtiles:///pm11.pmtiles',
-        attribution: '<a href="https://github.com/hfu/pm11">PM11</a>'
-      }
-    },
-    layers: [
-      {
-        id: 'background',
-        type: 'background',
-        paint: {
-          'background-color': '#f0f0f0'
-        }
-      },
-      {
-        id: 'water',
-        type: 'fill',
-        source: 'pm11',
-        'source-layer': 'water',
-        paint: {
-          'fill-color': '#80deea'
-        }
-      },
-      {
-        id: 'transportation',
-        type: 'line',
-        source: 'pm11',
-        'source-layer': 'transportation',
-        paint: {
-          'line-color': '#ffa726',
-          'line-width': 1
-        }
-      },
-      {
-        id: 'building',
-        type: 'fill',
-        source: 'pm11',
-        'source-layer': 'building',
-        paint: {
-          'fill-color': '#bdbdbd',
-          'fill-opacity': 0.7
-        }
-      },
-      {
-        id: 'place_label',
-        type: 'symbol',
-        source: 'pm11',
-        'source-layer': 'place',
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-size': 12
+    container: 'map',
+    // Use local system fonts for CJK ideographs on the client device
+    // (works even if glyphs do not include CJK). This is a CSS font-family list.
+    localIdeographFontFamily: 'Noto Sans CJK JP, Noto Sans JP, Hiragino Sans, Hiragino Kaku Gothic ProN, Meiryo, PingFang SC, Apple SD Gothic Neo, Noto Sans CJK SC, Noto Sans CJK TC, sans-serif',
+    style: {
+        version: 8,
+        // Use Protomaps Basemaps assets for SDF glyphs (Latin, symbols)
+        glyphs: 'https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf',
+        sources: {
+            pm11: {
+                type: 'vector',
+                url: 'pmtiles:///pm11.pmtiles',
+                attribution: '<a href="https://github.com/hfu/pm11">PM11</a>'
+            }
         },
-        paint: {
-          'text-color': '#333',
-          'text-halo-color': '#fff',
-          'text-halo-width': 1
-        }
-      }
-    ]
-  },
-  center: [0, 0],
-  zoom: 2
+        layers: [
+            {
+                id: 'background',
+                type: 'background',
+                paint: {
+                    'background-color': '#f0f0f0'
+                }
+            },
+            {
+                id: 'water',
+                type: 'fill',
+                source: 'pm11',
+                'source-layer': 'water',
+                paint: {
+                    'fill-color': '#80deea'
+                }
+            },
+            {
+                id: 'transportation',
+                type: 'line',
+                source: 'pm11',
+                'source-layer': 'transportation',
+                paint: {
+                    'line-color': '#ffa726',
+                    'line-width': 1
+                }
+            },
+            {
+                id: 'building',
+                type: 'fill',
+                source: 'pm11',
+                'source-layer': 'building',
+                paint: {
+                    'fill-color': '#bdbdbd',
+                    'fill-opacity': 0.7
+                }
+            },
+            {
+                id: 'place_label',
+                type: 'symbol',
+                source: 'pm11',
+                'source-layer': 'place',
+                layout: {
+                    'text-field': ['get', 'name'],
+                    'text-size': 12,
+                    // Use Inter glyphs from Protomaps assets for Latin; CJK falls back to local fonts
+                    'text-font': ['Inter']
+                },
+                paint: {
+                    'text-color': '#333',
+                    'text-halo-color': '#fff',
+                    'text-halo-width': 1
+                }
+            }
+        ]
+    },
+    center: [0, 0],
+    zoom: 2
 });
 
 map.addControl(new maplibregl.NavigationControl());
