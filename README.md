@@ -109,6 +109,60 @@ The niroku installer will:
 14. ✅ **Set up configurations**: `martin.yml` (PMTiles paths, web UI) and `Caddyfile` (reverse proxy, CORS)
 15. ✅ **Disable /tmp tmpfs** if present (prevents RAM exhaustion on Raspberry Pi)
 16. ✅ **Generate installation log** at `/tmp/niroku_install.log` for troubleshooting
+17. ✅ **Install PM11 (optional)**: When `PM11=1` is set, downloads pm11.pmtiles (11-country subset) and creates an interactive web viewer accessible at `http://localhost:8080/pm11/`
+
+## PM11 Feature (Optional)
+
+PM11 is a lightweight planet.pmtiles subset covering 11 countries, created by the [hfu/pm11](https://github.com/hfu/pm11) project. It's useful for testing and demonstrations without downloading the full planet dataset.
+
+### Installing PM11
+
+To install PM11 along with niroku:
+
+```bash
+# Install niroku with PM11
+sudo PM11=1 ./install.sh
+
+# Or using one-line install
+curl -fsSL https://unvt.github.io/niroku/install.sh | sudo -E PM11=1 bash -
+```
+
+### What PM11 Installs
+
+When `PM11=1` is set, the installer will:
+
+1. Download `pm11.pmtiles` (~10GB, size may vary by version) from https://tunnel.optgeo.org/pm11.pmtiles to `/opt/niroku/data/pm11.pmtiles`
+2. Create an interactive map viewer using Vite, MapLibre GL JS, and PMTiles
+3. Install the viewer site at `/opt/niroku/data/pm11/`
+4. Configure the viewer to use the local `/pm11.pmtiles` file
+
+### Accessing PM11
+
+After installation with PM11:
+
+```bash
+# Access the PM11 viewer
+http://localhost:8080/pm11/
+
+# Or from another device on the network
+http://[YOUR_PI_IP]:8080/pm11/
+```
+
+The viewer provides:
+- Interactive map with zoom and pan controls
+- Vector tile rendering using MapLibre GL JS
+- Layers: water, transportation, buildings, and place labels
+- Direct PMTiles access without a tile server
+
+### Removing PM11
+
+PM11 is automatically removed when you run the uninstall script:
+
+```bash
+sudo ./uninstall.sh
+```
+
+This will remove both `/opt/niroku/data/pm11.pmtiles` and `/opt/niroku/data/pm11/` directory.
 
 ## Post-Installation Steps
 
@@ -182,11 +236,17 @@ export NIROKU_FORCE_OS=1
 # Keep existing installation (default is to overwrite)
 export NIROKU_KEEP_EXISTING=1
 
+# Install PM11 (11-country planet.pmtiles subset) and viewer
+export PM11=1
+
 # Example: Full non-interactive install (overwrites existing by default)
 sudo NIROKU_FORCE_OS=1 ./install.sh
 
 # Example: Non-interactive install that keeps existing installation
 sudo NIROKU_FORCE_OS=1 NIROKU_KEEP_EXISTING=1 ./install.sh
+
+# Example: Install with PM11 feature
+sudo PM11=1 ./install.sh
 ```
 
 ## Security Considerations

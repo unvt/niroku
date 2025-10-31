@@ -735,6 +735,250 @@ post_install_smoke_checks() {
     log_success "Post-install smoke checks completed"
 }
 
+# Install PM11 PMTiles and viewer (optional, controlled by PM11 environment variable)
+install_pm11() {
+    # Check if PM11 environment variable is set
+    if [ -z "${PM11:-}" ]; then
+        log_info "PM11 environment variable not set. Skipping PM11 installation."
+        return 0
+    fi
+    
+    log_info "Installing PM11 PMTiles and viewer..."
+    
+    # Download pm11.pmtiles to /opt/niroku/data/
+    log_info "Downloading pm11.pmtiles (this may take a while)..."
+    PM11_PMTILES_PATH="$DATA_DIR/pm11.pmtiles"
+    PM11_URL="https://tunnel.optgeo.org/pm11.pmtiles"
+    
+    if [ -f "$PM11_PMTILES_PATH" ]; then
+        log_warning "pm11.pmtiles already exists at $PM11_PMTILES_PATH"
+        if [ "${NIROKU_KEEP_EXISTING:-0}" != "1" ]; then
+            log_info "Removing existing pm11.pmtiles for fresh download"
+            rm -f "$PM11_PMTILES_PATH"
+        else
+            log_info "Keeping existing pm11.pmtiles"
+        fi
+    fi
+    
+    if [ ! -f "$PM11_PMTILES_PATH" ]; then
+        # Check if aria2c is available (should be installed via install_dependencies)
+        if ! command -v aria2c >/dev/null 2>&1; then
+            log_error "aria2c is not installed. PM11 requires aria2 for downloading."
+            log_error "Please ensure install_dependencies has been run before install_pm11."
+            return 1
+        fi
+        
+        if ! aria2c -x 2 -s 2 -o "$PM11_PMTILES_PATH" "$PM11_URL"; then
+            log_error "Failed to download pm11.pmtiles from $PM11_URL"
+            return 1
+        fi
+        log_success "Downloaded pm11.pmtiles to $PM11_PMTILES_PATH"
+    fi
+    
+    # Create PM11 viewer site using Vite
+    log_info "Creating PM11 viewer site..."
+    PM11_VIEWER_DIR="$DATA_DIR/pm11"
+    PM11_TMP_DIR="$TMP_BASE/pm11-vite-project"
+    
+    # Clean up any existing temporary directory
+    rm -rf "$PM11_TMP_DIR"
+    
+    # Create Vite project
+    mkdir -p "$PM11_TMP_DIR"
+    cd "$PM11_TMP_DIR"
+    
+    # Create package.json
+    cat > package.json << 'EOF'
+{
+  "name": "pm11-viewer",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "vite": "latest"
+  },
+  "dependencies": {
+    "maplibre-gl": "latest",
+    "pmtiles": "latest"
+  }
+}
+EOF
+    
+    # Create index.html (based on pm11 repo)
+    cat > index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM11 Demo</title>
+</head>
+<body>
+  <div id="map"></div>
+  <script type="module" src="/index.js"></script>
+</body>
+</html>
+EOF
+    
+    # Create index.js (based on pm11 repo, modified to use local pmtiles)
+    cat > index.js << 'EOF'
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import './index.css';
+import { Protocol } from 'pmtiles';
+
+// Register PMTiles protocol
+const protocol = new Protocol();
+maplibregl.addProtocol('pmtiles', protocol.tile);
+
+// Initialize map
+const map = new maplibregl.Map({
+  container: 'map',
+  style: {
+    version: 8,
+    sources: {
+      pm11: {
+        type: 'vector',
+        url: 'pmtiles:///pm11.pmtiles',
+        attribution: '<a href="https://github.com/hfu/pm11">PM11</a>'
+      }
+    },
+    layers: [
+      {
+        id: 'background',
+        type: 'background',
+        paint: {
+          'background-color': '#f0f0f0'
+        }
+      },
+      {
+        id: 'water',
+        type: 'fill',
+        source: 'pm11',
+        'source-layer': 'water',
+        paint: {
+          'fill-color': '#80deea'
+        }
+      },
+      {
+        id: 'transportation',
+        type: 'line',
+        source: 'pm11',
+        'source-layer': 'transportation',
+        paint: {
+          'line-color': '#ffa726',
+          'line-width': 1
+        }
+      },
+      {
+        id: 'building',
+        type: 'fill',
+        source: 'pm11',
+        'source-layer': 'building',
+        paint: {
+          'fill-color': '#bdbdbd',
+          'fill-opacity': 0.7
+        }
+      },
+      {
+        id: 'place_label',
+        type: 'symbol',
+        source: 'pm11',
+        'source-layer': 'place',
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-size': 12
+        },
+        paint: {
+          'text-color': '#333',
+          'text-halo-color': '#fff',
+          'text-halo-width': 1
+        }
+      }
+    ]
+  },
+  center: [0, 0],
+  zoom: 2
+});
+
+map.addControl(new maplibregl.NavigationControl());
+EOF
+    
+    # Create index.css
+    cat > index.css << 'EOF'
+body {
+  margin: 0;
+  padding: 0;
+}
+
+#map {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+}
+EOF
+    
+    # Create vite.config.js to customize build output
+    cat > vite.config.js << 'EOF'
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  base: '/pm11/',
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        entryFileNames: 'index.js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name].[ext]'
+      }
+    }
+  }
+});
+EOF
+    
+    # Install dependencies and build
+    log_info "Installing npm dependencies for PM11 viewer..."
+    if ! npm install --quiet 2>&1 | grep -v "npm WARN"; then
+        log_error "Failed to install npm dependencies for PM11 viewer"
+        log_error "Check /tmp/niroku_install.log for details"
+        cd /
+        rm -rf "$PM11_TMP_DIR"
+        return 1
+    fi
+    
+    log_info "Building PM11 viewer with Vite..."
+    if ! npm run build; then
+        log_error "Failed to build PM11 viewer with Vite"
+        log_error "Check /tmp/niroku_install.log for details"
+        cd /
+        rm -rf "$PM11_TMP_DIR"
+        return 1
+    fi
+    
+    # Copy built files to destination
+    if [ -d "$PM11_VIEWER_DIR" ]; then
+        if [ "${NIROKU_KEEP_EXISTING:-0}" != "1" ]; then
+            log_info "Removing existing PM11 viewer directory"
+            rm -rf "$PM11_VIEWER_DIR"
+        fi
+    fi
+    
+    mkdir -p "$PM11_VIEWER_DIR"
+    cp -r dist/* "$PM11_VIEWER_DIR/"
+    
+    # Clean up temporary directory
+    cd /
+    rm -rf "$PM11_TMP_DIR"
+    
+    log_success "PM11 viewer installed at $PM11_VIEWER_DIR"
+    log_info "Access PM11 viewer at: http://localhost:8080/pm11/"
+}
+
 
 # Main installation flow
 main() {
@@ -759,6 +1003,7 @@ main() {
     install_go_pmtiles
     configure_martin
     configure_caddy
+    install_pm11
     setup_wifi_ap
     generate_qr_codes
     display_summary
