@@ -905,21 +905,22 @@ EOF
 </html>
 EOF
     
-    # Download style.json from project website to the PM11 folder
+    # Download style.json into the temporary project (to avoid removal before final copy)
     STYLE_URL="https://unvt.github.io/niroku/style.json"
+    STYLE_PATH="$PM11_TMP_DIR/style.json"
     log_info "Downloading style.json for MapLibre..."
-    if ! aria2c -x 2 -s 2 -d "$PM11_VIEWER_DIR" -o "style.json" "$STYLE_URL"; then
+    if ! aria2c -x 2 -s 2 -d "$PM11_TMP_DIR" -o "style.json" "$STYLE_URL"; then
         log_error "Failed to download style.json from $STYLE_URL"
         cd /
         rm -rf "$PM11_TMP_DIR"
         return 1
     fi
 
-    # If local assets are available, rewrite glyphs/sprite paths in style.json
-    if [ -f "$PM11_VIEWER_DIR/style.json" ]; then
+    # If local assets are available, rewrite glyphs/sprite paths in style.json (in temp path)
+    if [ -f "$STYLE_PATH" ]; then
         if command -v jq >/dev/null 2>&1; then
             tmp_style="$TMP_BASE/style.json.tmp"
-            cp "$PM11_VIEWER_DIR/style.json" "$tmp_style" || true
+            cp "$STYLE_PATH" "$tmp_style" || true
 
             # Rewrite glyphs to local mirror if available
             if [ "$USE_LOCAL_GLYPHS" -eq 1 ]; then
@@ -945,7 +946,7 @@ EOF
                 fi
             fi
 
-            mv "$tmp_style" "$PM11_VIEWER_DIR/style.json"
+            mv "$tmp_style" "$STYLE_PATH"
         else
             log_warning "jq not found; cannot rewrite style.json for local assets. Keeping remote URLs."
         fi
@@ -1041,6 +1042,13 @@ EOF
     
     mkdir -p "$PM11_VIEWER_DIR"
     cp -r dist/* "$PM11_VIEWER_DIR/"
+    # Copy the (possibly rewritten) style.json into the final viewer directory
+    if [ -f "$STYLE_PATH" ]; then
+        cp "$STYLE_PATH" "$PM11_VIEWER_DIR/style.json"
+        log_info "Placed style.json into $PM11_VIEWER_DIR/"
+    else
+        log_warning "style.json not found at $STYLE_PATH; viewer may 404 on style.json"
+    fi
     
     # Clean up temporary directory
     cd /
