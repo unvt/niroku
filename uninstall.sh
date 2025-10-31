@@ -250,6 +250,19 @@ remove_pm11() {
     fi
 }
 
+# Remove locally mirrored glyph PBFs (if present)
+remove_fonts_mirror() {
+    local FONTS_DIR="/opt/niroku/data/fonts"
+    log_info "Checking local glyph mirror..."
+    if [ -d "$FONTS_DIR" ]; then
+        log_info "Removing local glyph mirror at $FONTS_DIR..."
+        rm -rf "$FONTS_DIR" || true
+        log_success "Removed $FONTS_DIR"
+    else
+        log_info "No local glyph mirror found"
+    fi
+}
+
 # Remove base packages
 remove_base_packages() {
     log_info "Checking for base packages to remove..."
@@ -367,6 +380,9 @@ main() {
     stop_martin
     stop_caddy
     remove_caddy_package
+    # Clean PM11 viewer and local glyph mirror before removing the install dir
+    remove_pm11
+    remove_fonts_mirror
     remove_niroku_installation
     remove_base_packages
     remove_optional_packages
@@ -474,8 +490,7 @@ main() {
     # Remove go-pmtiles CLI
     remove_go_pmtiles
     
-    # Remove PM11 PMTiles and viewer
-    remove_pm11
+    # (PM11 and glyph mirror already cleaned above)
     
     # Optionally restore tmpfs on /tmp (symmetry with install.sh)
     if [ -t 0 ]; then
