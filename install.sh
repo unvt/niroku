@@ -746,7 +746,7 @@ install_pm11() {
     log_info "Installing PM11 PMTiles and viewer..."
     
     # Download pm11.pmtiles to /opt/niroku/data/
-    log_info "Downloading pm11.pmtiles (this may take a while)..."
+    log_info "Downloading pm11.pmtiles (~1.4 GB, this may take a while)..."
     PM11_PMTILES_PATH="$DATA_DIR/pm11.pmtiles"
     PM11_URL="https://tunnel.optgeo.org/pm11.pmtiles"
     
@@ -897,8 +897,9 @@ const map = new maplibregl.Map({
                 layout: {
                     'text-field': ['get', 'name'],
                     'text-size': 12,
-                    // Use Inter glyphs from Protomaps assets for Latin; CJK falls back to local fonts
-                    'text-font': ['Inter']
+                        // Use Noto Sans glyphs from Protomaps basemaps-assets for Latin; CJK falls back to local fonts
+                        // Protomaps provides fonts named e.g. "Noto Sans Regular", "Noto Sans Medium", "Noto Sans Italic"
+                        'text-font': ['Noto Sans Regular']
                 },
                 paint: {
                     'text-color': '#333',
