@@ -1018,54 +1018,87 @@ import { Protocol } from 'pmtiles';
 const protocol = new Protocol();
 maplibregl.addProtocol('pmtiles', protocol.tile);
 
-// Initialize map
+// Initialize map with a minimal empty style, then fetch and apply the real style
+const initialStyle = { version: 8, name: 'empty', sources: {}, layers: [] };
+
 const map = new maplibregl.Map({
     container: 'map',
     // Use local system fonts for CJK ideographs on the client device
-    // (works even if glyphs do not include CJK). This is a CSS font-family list.
     localIdeographFontFamily: 'Noto Sans CJK JP, Noto Sans JP, Hiragino Sans, Hiragino Kaku Gothic ProN, Meiryo, PingFang SC, Apple SD Gothic Neo, Noto Sans CJK SC, Noto Sans CJK TC, sans-serif',
-    // Load external style generated/hosted by niroku
-    style: 'style.json',
+    style: initialStyle,
     center: [0, 0],
     zoom: 2
 });
 
-// Navigation control (zoom + rotate)
-map.addControl(new maplibregl.NavigationControl(), 'top-right');
-
-// Geolocate control: show user location and optionally track
-map.addControl(new maplibregl.GeolocateControl({
-    positionOptions: { enableHighAccuracy: true },
-    trackUserLocation: true,
-    showAccuracyCircle: true
-}), 'top-left');
-
-// Scale control: use metric units by default
-map.addControl(new maplibregl.ScaleControl({
-    maxWidth: 120,
-    unit: 'metric'
-}), 'bottom-left');
-
-// Globe control: MapLibre may not expose a GlobeControl. Add it only if present.
-try {
-    if (typeof maplibregl.GlobeControl !== 'undefined') {
-        // Some builds may include a GlobeControl-compatible API
-        map.addControl(new maplibregl.GlobeControl(), 'top-left');
-    } else if (typeof window.GlobeControl !== 'undefined') {
-        // Some plugins may expose a global
-        map.addControl(new window.GlobeControl(), 'top-left');
-    } else {
-        // No globe control available; skip gracefully
-        // Console info kept for debugging in browser devtools
-        // (not an error; MapLibre will render a flat map)
-        // eslint-disable-next-line no-console
-        console.info('GlobeControl not available; rendering as flat map');
-    }
-} catch (e) {
-    // Don't let control failures break the viewer
-    // eslint-disable-next-line no-console
-    console.warn('Failed to add GlobeControl (non-fatal):', e && e.message ? e.message : e);
+// Helper to make site-root-relative URLs absolute so MapLibre accepts them
+function makeAbsolute(url) {
+    if (!url) return url;
+    // protocol-relative
+    if (url.startsWith('//')) return window.location.protocol + url;
+    // root-relative
+    if (url.startsWith('/')) return window.location.origin + url;
+    // already absolute
+    return url;
 }
+
+// Fetch style.json ourselves so we can rewrite sprite/glyphs/source URLs to absolute
+fetch('style.json')
+    .then((r) => r.json())
+    .then((style) => {
+        try {
+            // sprite and glyphs must be absolute URLs for MapLibre; make them absolute if root-relative
+            if (style.sprite) style.sprite = makeAbsolute(style.sprite);
+            if (style.glyphs) style.glyphs = makeAbsolute(style.glyphs);
+
+            // Ensure any source URLs (e.g., /martin/pm11) are absolute so they resolve correctly
+            if (style.sources) {
+                Object.keys(style.sources).forEach((s) => {
+                    const src = style.sources[s];
+                    if (src && src.url && typeof src.url === 'string' && src.url.startsWith('/')) {
+                        src.url = makeAbsolute(src.url);
+                    }
+                });
+            }
+
+            // Apply rewritten style to the map
+            map.setStyle(style);
+        } catch (e) {
+            // eslint-disable-next-line no-console
+            console.error('Failed to rewrite or apply style.json:', e && e.message ? e.message : e);
+        }
+    })
+    .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.error('Failed to load style.json for PM11 viewer:', err);
+    });
+
+// Add controls after the map has loaded the style so UI reflects available images/resources
+map.on('load', () => {
+    // Navigation control (zoom + rotate)
+    map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+    // GeolocateControl intentionally omitted for non-HTTPS viewers.
+    // If you build the viewer behind HTTPS or localhost and want geolocation,
+    // re-enable maplibregl.GeolocateControl here.
+
+    // Scale control: use metric units by default
+    map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: 'metric' }), 'bottom-left');
+
+    // Globe control: MapLibre may expose a GlobeControl in newer builds/plugins—add if present
+    try {
+        if (typeof maplibregl.GlobeControl !== 'undefined') {
+            map.addControl(new maplibregl.GlobeControl(), 'top-left');
+        } else if (typeof window.GlobeControl !== 'undefined') {
+            map.addControl(new window.GlobeControl(), 'top-left');
+        } else {
+            // eslint-disable-next-line no-console
+            console.info('GlobeControl not available; rendering as flat map');
+        }
+    } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('Failed to add GlobeControl (non-fatal):', e && e.message ? e.message : e);
+    }
+});
 
 EOF
     
