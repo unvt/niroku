@@ -196,6 +196,29 @@ The viewer provides:
 - Layers: water, transportation, buildings, and place labels
 - Direct PMTiles access without a tile server
 
+### Verifying sprites & viewer (headless)
+
+If you want to verify the PM11 viewer and sprites without opening a browser (useful on headless devices), the repository includes a small check script.
+
+On the device (or where Caddy is serving):
+
+```bash
+# Run quick checks against localhost (or pass host as the first arg)
+sudo bash /opt/niroku/scripts/check_pm11_sprites.sh
+```
+
+The script checks:
+- `http://<host>/pm11/style.json` is reachable
+- `http://<host>/sprites/v4/light.json` and `light.png` are reachable
+- Validates `light.json` is parseable JSON (requires `jq`)
+
+If the script reports failures, inspect `/opt/niroku/data/sprites/v4` and `/opt/niroku/data/pm11/style.json`, and view Caddy logs:
+
+```bash
+sudo journalctl -u caddy-niroku -n 200
+sudo cat /tmp/niroku_install.log
+```
+
 ### Removing PM11
 
 PM11 is automatically removed when you run the uninstall script:

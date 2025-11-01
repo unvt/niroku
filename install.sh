@@ -33,6 +33,9 @@ if ! (touch "$TMP_BASE/.niroku_test" 2>/dev/null && rm -f "$TMP_BASE/.niroku_tes
     TMP_BASE="/var/tmp"
 fi
 
+# Directory where this installer script lives (useful when running from a repo clone)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Logging functions
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -901,6 +904,21 @@ post_install_smoke_checks() {
         fi
 
         log_success "PM11 smoke tests completed"
+
+        # If a bundled verification script is present alongside this installer (e.g., when
+        # running from a git clone), run it for a more detailed check and JSON validation.
+        CHECK_SCRIPT="$SCRIPT_DIR/scripts/check_pm11_sprites.sh"
+        if [ -f "$CHECK_SCRIPT" ]; then
+            log_info "Found bundled PM11 check script at $CHECK_SCRIPT — running it now"
+            # Run with host 127.0.0.1 to exercise Caddy-local paths; do not fail install on script errors
+            if bash "$CHECK_SCRIPT" 127.0.0.1; then
+                log_info "Bundled PM11 check script passed"
+            else
+                log_warning "Bundled PM11 check script reported failures — inspect output above for details"
+            fi
+        else
+            log_info "No bundled PM11 check script found at $CHECK_SCRIPT (this is optional)"
+        fi
     }
 
 # Install PM11 PMTiles and viewer (optional, controlled by PM11 environment variable)
