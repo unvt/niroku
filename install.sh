@@ -1196,6 +1196,44 @@ EOF
     else
         log_warning "style.json not found at $STYLE_PATH; viewer may 404 on style.json"
     fi
+
+    # Ensure local sprites v4/light are available for Caddy to serve at /sprites/v4/
+    SPRITES_V4_DIR="$DATA_DIR/sprites/v4"
+    mkdir -p "$SPRITES_V4_DIR"
+    REMOTE_SPRITE_BASE="https://protomaps.github.io/basemaps-assets/sprites/v4"
+
+    for f in "light.json" "light.png"; do
+        if [ ! -f "$SPRITES_V4_DIR/$f" ]; then
+            if [ "${NIROKU_MIRROR_ASSETS:-1}" = "1" ]; then
+                log_info "Attempting to download remote sprite $f into $SPRITES_V4_DIR"
+                if command -v aria2c >/dev/null 2>&1; then
+                    aria2c -x 2 -s 2 -d "$SPRITES_V4_DIR" -o "$f" "$REMOTE_SPRITE_BASE/$f" || log_warning "aria2c failed to download $f"
+                else
+                    if ! curl -fsSL -o "$SPRITES_V4_DIR/$f" "$REMOTE_SPRITE_BASE/$f"; then
+                        log_warning "curl failed to download $f"
+                    fi
+                fi
+            else
+                log_warning "$f missing and NIROKU_MIRROR_ASSETS != 1; viewer may fallback to remote sprite URL"
+            fi
+        fi
+    done
+
+    # If @2x missing, create a fallback from light.png (best-effort)
+    if [ -f "$SPRITES_V4_DIR/light.png" ] && [ ! -f "$SPRITES_V4_DIR/light@2x.png" ]; then
+        if cp "$SPRITES_V4_DIR/light.png" "$SPRITES_V4_DIR/light@2x.png" 2>/dev/null; then
+            log_info "Created fallback light@2x.png from light.png"
+        else
+            log_warning "Failed to create fallback light@2x.png"
+        fi
+    fi
+
+    # Final sanity check
+    if [ -f "$SPRITES_V4_DIR/light.json" ] && [ -f "$SPRITES_V4_DIR/light.png" ]; then
+        log_success "Sprites v4 light assets present for local serving"
+    else
+        log_warning "Sprites v4 light assets incomplete after attempts; viewer will use remote sprites or show missing images"
+    fi
     
     # Clean up temporary directory
     cd /
