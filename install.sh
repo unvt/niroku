@@ -904,20 +904,21 @@ install_pm11() {
     
     # Create package.json
     cat > package.json << 'EOF'
-{
-  "name": "pm11-viewer",
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "build": "vite build"
-  },
-  "devDependencies": {
-    "vite": "latest"
-  },
-  "dependencies": {
-    "maplibre-gl": "latest",
-    "pmtiles": "latest"
-  }
+    try {
+        if (typeof maplibregl.GlobeControl !== 'undefined') {
+            // Place GlobeControl in the upper-right as requested
+            map.addControl(new maplibregl.GlobeControl(), 'top-right');
+        } else if (typeof window.GlobeControl !== 'undefined') {
+            map.addControl(new window.GlobeControl(), 'top-right');
+        } else {
+            // eslint-disable-next-line no-console
+            console.info('GlobeControl not available; rendering as flat map');
+        }
+    } catch (e) {
+        // Don't let control failures break the viewer
+        // eslint-disable-next-line no-console
+        console.warn('Failed to add GlobeControl (non-fatal):', e && e.message ? e.message : e);
+    }
 }
 EOF
     
@@ -1027,7 +1028,9 @@ const map = new maplibregl.Map({
     localIdeographFontFamily: 'Noto Sans CJK JP, Noto Sans JP, Hiragino Sans, Hiragino Kaku Gothic ProN, Meiryo, PingFang SC, Apple SD Gothic Neo, Noto Sans CJK SC, Noto Sans CJK TC, sans-serif',
     style: initialStyle,
     center: [0, 0],
-    zoom: 2
+    zoom: 2,
+    // Keep the map position in sync with URL hash (useful for shareable links)
+    hash: true
 });
 
 // Helper to make site-root-relative URLs absolute so MapLibre accepts them
