@@ -219,6 +219,18 @@ sudo journalctl -u caddy-niroku -n 200
 sudo cat /tmp/niroku_install.log
 ```
 
+Skip the bundled verification script
+
+If you prefer not to run the bundled PM11 verification script as part of post-install smoke checks, set the environment variable `NIROKU_SKIP_PM11_CHECK=1` when running the installer. This is useful for automated deployments or when you want to postpone checks.
+
+```bash
+# Skip the PM11 verification step during install
+sudo NIROKU_SKIP_PM11_CHECK=1 ./install.sh
+
+# Or when piping the installer
+curl -fsSL https://unvt.github.io/niroku/install.sh | sudo -E NIROKU_SKIP_PM11_CHECK=1 bash -
+```
+
 ### Removing PM11
 
 PM11 is automatically removed when you run the uninstall script:
