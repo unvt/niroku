@@ -1008,7 +1008,7 @@ EOF
     fi
 
     # Create index.js (based on pm11 repo), referencing external style.json
-    cat > index.js << 'EOF'
+        cat > index.js << 'EOF'
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './index.css';
@@ -1020,17 +1020,53 @@ maplibregl.addProtocol('pmtiles', protocol.tile);
 
 // Initialize map
 const map = new maplibregl.Map({
-  container: 'map',
-  // Use local system fonts for CJK ideographs on the client device
-  // (works even if glyphs do not include CJK). This is a CSS font-family list.
-  localIdeographFontFamily: 'Noto Sans CJK JP, Noto Sans JP, Hiragino Sans, Hiragino Kaku Gothic ProN, Meiryo, PingFang SC, Apple SD Gothic Neo, Noto Sans CJK SC, Noto Sans CJK TC, sans-serif',
-  // Load external style generated/hosted by niroku
-  style: 'style.json',
-  center: [0, 0],
-  zoom: 2
+    container: 'map',
+    // Use local system fonts for CJK ideographs on the client device
+    // (works even if glyphs do not include CJK). This is a CSS font-family list.
+    localIdeographFontFamily: 'Noto Sans CJK JP, Noto Sans JP, Hiragino Sans, Hiragino Kaku Gothic ProN, Meiryo, PingFang SC, Apple SD Gothic Neo, Noto Sans CJK SC, Noto Sans CJK TC, sans-serif',
+    // Load external style generated/hosted by niroku
+    style: 'style.json',
+    center: [0, 0],
+    zoom: 2
 });
 
-map.addControl(new maplibregl.NavigationControl());
+// Navigation control (zoom + rotate)
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+// Geolocate control: show user location and optionally track
+map.addControl(new maplibregl.GeolocateControl({
+    positionOptions: { enableHighAccuracy: true },
+    trackUserLocation: true,
+    showAccuracyCircle: true
+}), 'top-left');
+
+// Scale control: use metric units by default
+map.addControl(new maplibregl.ScaleControl({
+    maxWidth: 120,
+    unit: 'metric'
+}), 'bottom-left');
+
+// Globe control: MapLibre may not expose a GlobeControl. Add it only if present.
+try {
+    if (typeof maplibregl.GlobeControl !== 'undefined') {
+        // Some builds may include a GlobeControl-compatible API
+        map.addControl(new maplibregl.GlobeControl(), 'top-left');
+    } else if (typeof window.GlobeControl !== 'undefined') {
+        // Some plugins may expose a global
+        map.addControl(new window.GlobeControl(), 'top-left');
+    } else {
+        // No globe control available; skip gracefully
+        // Console info kept for debugging in browser devtools
+        // (not an error; MapLibre will render a flat map)
+        // eslint-disable-next-line no-console
+        console.info('GlobeControl not available; rendering as flat map');
+    }
+} catch (e) {
+    // Don't let control failures break the viewer
+    // eslint-disable-next-line no-console
+    console.warn('Failed to add GlobeControl (non-fatal):', e && e.message ? e.message : e);
+}
+
 EOF
     
     # Create index.css
