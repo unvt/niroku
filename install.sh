@@ -704,6 +704,25 @@ mirror_noto_sans_assets() {
                 log_warning "No v4 sprites found in cloned repository (fonts mirrored only)"
             fi
         fi
+        # Normalize sprites layout: ensure v4 lives at $DEST_SPRITES_DIR/v4
+        if [ -d "$DEST_SPRITES_DIR/v4" ]; then
+            log_info "Sprites v4 found under $DEST_SPRITES_DIR/v4"
+        else
+            # If sprites were moved/copied as flat files (e.g. light.json at $DEST_SPRITES_DIR),
+            # move them into v4 so Caddy will serve /sprites/v4/light.* as expected.
+            if ls "$DEST_SPRITES_DIR"/light.* >/dev/null 2>&1; then
+                mkdir -p "$DEST_SPRITES_DIR/v4"
+                mv "$DEST_SPRITES_DIR"/light.* "$DEST_SPRITES_DIR/v4/" 2>/dev/null || true
+                log_info "Normalized sprites into $DEST_SPRITES_DIR/v4"
+            else
+                log_info "No top-level light.* sprites found to normalize"
+            fi
+        fi
+
+        # Ensure permissions are web-readable so Caddy can serve them
+        if [ -d "$DEST_SPRITES_DIR" ]; then
+            chmod -R a+rX "$DEST_SPRITES_DIR" || true
+        fi
 
         # Quick sanity: ensure required files exist (light.json + light.png). If missing, warn.
         if [ -f "$DEST_SPRITES_DIR/v4/light.json" ] && [ -f "$DEST_SPRITES_DIR/v4/light.png" ]; then
@@ -1308,6 +1327,30 @@ EOF
             fi
         fi
     done
+
+    # Validate downloaded light.json if present; try one more time if invalid
+    if [ -f "$SPRITES_V4_DIR/light.json" ]; then
+        if command -v jq >/dev/null 2>&1; then
+            if ! jq empty "$SPRITES_V4_DIR/light.json" >/dev/null 2>&1; then
+                log_warning "Downloaded sprite JSON is invalid (light.json). Attempting re-download..."
+                rm -f "$SPRITES_V4_DIR/light.json"
+                if command -v aria2c >/dev/null 2>&1; then
+                    aria2c -x 2 -s 2 -d "$SPRITES_V4_DIR" -o "light.json" "$REMOTE_SPRITE_BASE/light.json" || true
+                else
+                    curl -fsSL -o "$SPRITES_V4_DIR/light.json" "$REMOTE_SPRITE_BASE/light.json" || true
+                fi
+                if ! jq empty "$SPRITES_V4_DIR/light.json" >/dev/null 2>&1; then
+                    log_warning "light.json still invalid after re-download. Viewer may use remote sprite URL instead."
+                else
+                    log_info "Re-downloaded and validated light.json successfully"
+                fi
+            else
+                log_info "Downloaded light.json is valid JSON"
+            fi
+        else
+            log_info "jq not available to validate light.json (install jq for validation)"
+        fi
+    fi
 
     # If @2x missing, create a fallback from light.png (best-effort)
     if [ -f "$SPRITES_V4_DIR/light.png" ] && [ ! -f "$SPRITES_V4_DIR/light@2x.png" ]; then
