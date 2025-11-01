@@ -862,6 +862,38 @@ post_install_smoke_checks() {
     # Run PM11-specific smoke tests if PM11 was installed
     run_pm11_smoke_tests
 
+    # Run bundled verification script (if present) for a more thorough post-install check.
+    # This script is optional and may be present when running the installer from a git clone
+    # or when the installer has been expanded into $INSTALL_DIR. To skip this check set
+    # NIROKU_SKIP_PM11_CHECK=1 in the environment before running the installer.
+    if [ "${NIROKU_SKIP_PM11_CHECK:-0}" != "1" ]; then
+        # Candidate locations to find the script
+        CANDIDATE_SCRIPTS=("$SCRIPT_DIR/scripts/check_pm11_sprites.sh" "$INSTALL_DIR/scripts/check_pm11_sprites.sh" "$INSTALL_DIR/scripts/check_pm11_sprites.sh")
+        for cs in "${CANDIDATE_SCRIPTS[@]}"; do
+            if [ -f "$cs" ] && [ -x "$cs" ]; then
+                log_info "Running bundled PM11 verification script: $cs"
+                # Run the script against localhost (Caddy) and do not abort on failure
+                if bash "$cs" 127.0.0.1; then
+                    log_info "PM11 verification script succeeded: $cs"
+                else
+                    log_warning "PM11 verification script returned failure (see output above): $cs"
+                fi
+                break
+            elif [ -f "$cs" ] && [ ! -x "$cs" ]; then
+                # If the script exists but is not executable, run it with bash
+                log_info "Found PM11 verification script (not executable), running with bash: $cs"
+                if bash "$cs" 127.0.0.1; then
+                    log_info "PM11 verification script succeeded: $cs"
+                else
+                    log_warning "PM11 verification script returned failure (see output above): $cs"
+                fi
+                break
+            fi
+        done
+    else
+        log_info "NIROKU_SKIP_PM11_CHECK=1 set; skipping bundled PM11 verification script"
+    fi
+
     log_success "Post-install smoke checks completed"
 }
 
