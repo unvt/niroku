@@ -837,8 +837,52 @@ post_install_smoke_checks() {
         fi
     fi
 
+    # Run PM11-specific smoke tests if PM11 was installed
+    run_pm11_smoke_tests
+
     log_success "Post-install smoke checks completed"
 }
+
+    # PM11-specific quick smoke tests: verify style.json and sprites are reachable via Caddy
+    run_pm11_smoke_tests() {
+        if [ -z "${PM11:-}" ]; then
+            return 0
+        fi
+
+        log_info "Running PM11 smoke tests..."
+        if ! command -v curl >/dev/null 2>&1; then
+            log_warning "curl not available; skipping PM11 HTTP checks"
+            return 0
+        fi
+
+        BASE_URL="http://127.0.0.1"
+        STYLE_URL="$BASE_URL/pm11/style.json"
+        SPRITE_JSON="$BASE_URL/sprites/v4/light.json"
+        SPRITE_PNG="$BASE_URL/sprites/v4/light.png"
+
+        status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$STYLE_URL" 2>/dev/null || echo "000")
+        if [ "$status" = "200" ]; then
+            log_info "PM11 style.json reachable ($STYLE_URL)"
+        else
+            log_warning "PM11 style.json not reachable (HTTP $status) at $STYLE_URL"
+        fi
+
+        status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$SPRITE_JSON" 2>/dev/null || echo "000")
+        if [ "$status" = "200" ]; then
+            log_info "Sprite JSON reachable ($SPRITE_JSON)"
+        else
+            log_warning "Sprite JSON not reachable (HTTP $status) at $SPRITE_JSON"
+        fi
+
+        status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$SPRITE_PNG" 2>/dev/null || echo "000")
+        if [ "$status" = "200" ]; then
+            log_info "Sprite PNG reachable ($SPRITE_PNG)"
+        else
+            log_warning "Sprite PNG not reachable (HTTP $status) at $SPRITE_PNG"
+        fi
+
+        log_success "PM11 smoke tests completed"
+    }
 
 # Install PM11 PMTiles and viewer (optional, controlled by PM11 environment variable)
 install_pm11() {
@@ -919,22 +963,21 @@ install_pm11() {
     mkdir -p "$PM11_TMP_DIR"
     cd "$PM11_TMP_DIR"
     
-    # Create package.json
-    cat > package.json << 'EOF'
-    try {
-        if (typeof maplibregl.GlobeControl !== 'undefined') {
-            // Place GlobeControl in the upper-right as requested
-            map.addControl(new maplibregl.GlobeControl(), 'top-right');
-        } else if (typeof window.GlobeControl !== 'undefined') {
-            map.addControl(new window.GlobeControl(), 'top-right');
-        } else {
-            // eslint-disable-next-line no-console
-            console.info('GlobeControl not available; rendering as flat map');
-        }
-    } catch (e) {
-        // Don't let control failures break the viewer
-        // eslint-disable-next-line no-console
-        console.warn('Failed to add GlobeControl (non-fatal):', e && e.message ? e.message : e);
+        # Create package.json
+        cat > package.json << 'EOF'
+{
+    "name": "pm11-viewer",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {
+        "build": "vite build"
+    },
+    "dependencies": {
+        "maplibre-gl": "latest",
+        "pmtiles": "latest"
+    },
+    "devDependencies": {
+        "vite": "latest"
     }
 }
 EOF
