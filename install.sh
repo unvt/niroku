@@ -1205,6 +1205,53 @@ EOF
     
     # Install dependencies and build
     log_info "Installing npm dependencies for PM11 viewer..."
+    # Validate package.json before running npm install. If it's invalid (leftover JS), recreate it.
+    if command -v node >/dev/null 2>&1; then
+        if ! node -e "const fs=require('fs'); try{JSON.parse(fs.readFileSync('package.json','utf8'));}catch(e){process.exit(2)}" 2>/dev/null; then
+            log_warning "package.json invalid or corrupted; recreating package.json"
+            cat > package.json << 'EOF'
+{
+    "name": "pm11-viewer",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {
+        "build": "vite build"
+    },
+    "dependencies": {
+        "maplibre-gl": "latest",
+        "pmtiles": "latest"
+    },
+    "devDependencies": {
+        "vite": "latest"
+    }
+}
+EOF
+        fi
+    elif command -v python3 >/dev/null 2>&1; then
+        if ! python3 -c "import json,sys; json.load(open('package.json'))" 2>/dev/null; then
+            log_warning "package.json invalid or corrupted (python check); recreating package.json"
+            cat > package.json << 'EOF'
+{
+    "name": "pm11-viewer",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {
+        "build": "vite build"
+    },
+    "dependencies": {
+        "maplibre-gl": "latest",
+        "pmtiles": "latest"
+    },
+    "devDependencies": {
+        "vite": "latest"
+    }
+}
+EOF
+        fi
+    else
+        log_info "No node/python available to validate package.json; proceeding to npm install which may fail if package.json invalid"
+    fi
+
     if ! npm install --quiet 2>&1 | grep -v "npm WARN"; then
         log_error "Failed to install npm dependencies for PM11 viewer"
         log_error "Check /tmp/niroku_install.log for details"
