@@ -677,7 +677,7 @@ mirror_noto_sans_assets() {
         fi
     fi
 
-    # Sprites (if present)
+    # Sprites (if present) - robustly place v4 sprites under $DATA_DIR/sprites/v4
     if [ -d "$TMP_CLONE/basemaps-assets/sprites" ]; then
         if [ -d "$DEST_SPRITES_DIR" ]; then
             if [ "${NIROKU_KEEP_EXISTING:-0}" = "1" ]; then
@@ -687,12 +687,29 @@ mirror_noto_sans_assets() {
                 rm -rf "$DEST_SPRITES_DIR"
             fi
         fi
-        if [ ! -d "$DEST_SPRITES_DIR" ]; then
-            if mv "$TMP_CLONE/basemaps-assets/sprites" "$DEST_SPRITES_DIR"; then
-                log_success "Mirrored sprites to $DEST_SPRITES_DIR"
+
+        # Prefer moving the whole sprites tree; if it contains a v4 subdir ensure it's placed correctly
+        if mv "$TMP_CLONE/basemaps-assets/sprites" "$DEST_SPRITES_DIR" 2>/dev/null; then
+            log_success "Mirrored sprites to $DEST_SPRITES_DIR"
+        else
+            # Fallback: try to find v4 inside the cloned sprites and copy it
+            if [ -d "$TMP_CLONE/basemaps-assets/sprites/v4" ]; then
+                mkdir -p "$DEST_SPRITES_DIR"
+                if cp -a "$TMP_CLONE/basemaps-assets/sprites/v4" "$DEST_SPRITES_DIR/"; then
+                    log_success "Copied sprites/v4 to $DEST_SPRITES_DIR/v4"
+                else
+                    log_warning "Failed to copy sprites/v4 into $DEST_SPRITES_DIR"
+                fi
             else
-                log_warning "Failed to move sprites into $DEST_SPRITES_DIR"
+                log_warning "No v4 sprites found in cloned repository (fonts mirrored only)"
             fi
+        fi
+
+        # Quick sanity: ensure required files exist (light.json + light.png). If missing, warn.
+        if [ -f "$DEST_SPRITES_DIR/v4/light.json" ] && [ -f "$DEST_SPRITES_DIR/v4/light.png" ]; then
+            log_info "Sprites v4 light assets present"
+        else
+            log_warning "Sprites v4 'light' assets missing under $DEST_SPRITES_DIR/v4. Viewer may fallback to remote sprites. Re-run with NIROKU_MIRROR_ASSETS=1 to re-mirror."
         fi
     else
         log_warning "Cloned repository missing 'sprites' directory (fonts mirrored only)"
@@ -983,8 +1000,8 @@ EOF
                 fi
             fi
 
-            # 3) Sprite: prefer local if sprites are mirrored, otherwise ensure remote
-            if [ -d "$DATA_DIR/sprites" ]; then
+            # 3) Sprite: prefer local if sprites v4/light assets are present, otherwise use remote
+            if [ -f "$DATA_DIR/sprites/v4/light.json" ] && [ -f "$DATA_DIR/sprites/v4/light.png" ]; then
                 if jq '.sprite = "/sprites/v4/light"' "$tmp_style" > "$tmp_style.s"; then
                     mv "$tmp_style.s" "$tmp_style"
                     log_info "Set sprite to local /sprites/v4/light"
@@ -995,10 +1012,13 @@ EOF
             else
                 if jq '.sprite = "https://protomaps.github.io/basemaps-assets/sprites/v4/light"' "$tmp_style" > "$tmp_style.s"; then
                     mv "$tmp_style.s" "$tmp_style"
-                    log_info "Set sprite to remote Protomaps URL (no local sprites found)"
+                    log_info "Set sprite to remote Protomaps URL (no local sprites found or incomplete mirror)"
                 else
                     log_warning "Failed to set remote sprite URL; keeping existing"
                     rm -f "$tmp_style.s" 2>/dev/null || true
+                fi
+                if [ -d "$DATA_DIR/sprites" ]; then
+                    log_warning "Found sprites mirror but v4/light assets missing; viewer will use remote sprites unless you re-mirror assets"
                 fi
             fi
 
@@ -1090,9 +1110,9 @@ map.on('load', () => {
     // Globe control: MapLibre may expose a GlobeControl in newer builds/plugins—add if present
     try {
         if (typeof maplibregl.GlobeControl !== 'undefined') {
-            map.addControl(new maplibregl.GlobeControl(), 'top-left');
+            map.addControl(new maplibregl.GlobeControl());
         } else if (typeof window.GlobeControl !== 'undefined') {
-            map.addControl(new window.GlobeControl(), 'top-left');
+            map.addControl(new window.GlobeControl());
         } else {
             // eslint-disable-next-line no-console
             console.info('GlobeControl not available; rendering as flat map');
