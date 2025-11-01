@@ -8,6 +8,25 @@ The format is based on Keep a Changelog and follows [Semantic Versioning](https:
 
 - Change: Caddy now listens on port 80 (was 8080). Installer generates a Caddyfile with `:80` and runs `caddy-niroku` as root to allow binding to privileged port. README updated to remove `:8080` URLs.
 
+## [0.1.2] - 2025-11-01
+
+### Added (0.1.2)
+
+- PM11 viewer improvements: interactive viewer template now includes URL hash synchronization (`hash: true`) and a ScaleControl (metric) for clearer units.
+- PM11 smoke tests: installer now runs quick post-install checks for `style.json` and sprite endpoints and logs results to help diagnose missing assets.
+
+### Changed (0.1.2)
+
+- PM11 style.json rewrite is more robust: the installer rewrites `sources.protomaps.url` → `/martin/pm11`, prefers local glyphs when `/opt/niroku/data/fonts` exists, and only switches to a local sprite when `sprites/v4/light.json` and `light.png` are present.
+- GlobeControl placement: when available, the viewer adds GlobeControl in the upper-right (`top-right`). GeolocateControl is omitted on HTTP builds (must be enabled on HTTPS/localhost as needed).
+
+### Fixed (0.1.2)
+
+- Robust sprite mirroring: installer now ensures `sprites/v4` is placed correctly, attempts to download missing `light.json`/`light.png` during install when mirroring is enabled, and creates a `light@2x.png` fallback when needed.
+- PM11 build reliability: the installer validates and recreates a correct `package.json` before running `npm install` to avoid EJSONPARSE errors from corrupted heredocs or stale temps.
+- Client-side style handling: viewer now fetches `style.json` and converts root-relative sprite/glyphs/source URLs to absolute URLs before applying the style to prevent "Invalid sprite URL" errors.
+
+## [Unreleased]
 ## [0.1.1] - 2025-10-31
 
 ### Changed (0.1.1)

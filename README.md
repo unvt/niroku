@@ -560,6 +560,27 @@ Testing
 - A basic cycle test (uninstall -> install) was executed on device `m333` (Raspberry Pi 400 / aarch64) as part of this release verification. Logs are available on the device at `/tmp/niroku_install.log` and `/tmp/niroku_uninstall.log`.
 
 If you depend on automatic deployments or CI, consider running the installer in a VM or test device first and reviewing `/tmp/niroku_install.log` after the run.
+
+## Release v0.1.2 — 2025-11-01
+
+This is a maintenance release focused on PM11 viewer reliability and offline asset handling.
+
+Highlights
+
+- fix: PM11 viewer now synchronizes the map position with the URL hash (`hash: true`) and adds a ScaleControl using metric units for consistent measurements.
+- fix: GlobeControl (when available in MapLibre) is placed at the upper-right for consistent UI placement; GeolocateControl is intentionally disabled for non-HTTPS viewers.
+- fix: installer now validates and recreates `package.json` before running `npm install` to avoid JSON parse errors during the PM11 build.
+- fix: improved sprite mirroring: installer ensures `sprites/v4/light.json` and `light.png` are present, attempts to download missing sprites when mirroring is enabled, and creates a `light@2x.png` fallback when necessary.
+- add: PM11 smoke tests run automatically after install to verify `style.json` and sprite endpoints and log the results to `/tmp/niroku_install.log`.
+
+Why this matters
+
+- Reduces visible client-side errors like "Invalid sprite URL" and missing sprite images in the PM11 viewer.
+- Makes PM11 installation more resilient on devices with flaky networks or partial mirrors.
+
+Testing
+
+- The full PM11 install flow (download pm11.pmtiles, mirror assets, build viewer) was exercised on `m333` (Raspberry Pi 400 / aarch64). Installation logs live at `/tmp/niroku_install.log` on-device.
 6. Remove Docker Engine packages and repository
 7. Remove cloudflared package
 8. Remove tippecanoe (if installed from source)
