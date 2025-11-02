@@ -4,17 +4,30 @@ This document explains the ideas behind niroku and the history of this project.
 
 ## Why niroku exists
 
-Making web maps available to everyone is no longer rocket science. The UN Maps platform is established, and many tools we use in the UNVT (UN Vector Tile Toolkit) ecosystem are maintained by strong open‑source communities.
+Web maps are maps you can use in a web browser or on a phone. They work by loading many small “tiles” from a server and drawing them on the client. Over the last 20 years, tools for making, hosting, and styling tiles have matured. For developers, building web maps is now very achievable.
 
-Open‑source software brings value to different groups:
+UN Maps supports UN operations. Some parts are not open to the public, but information about the initiative is available at [maps.un.org](https://maps.un.org/) (see also the [UN Maps Application](https://geoportal.un.org/webapps/UNMAPS/app.html)).
 
-- For developers: freedom and programmer happiness — making programming enjoyable
-- For procurement officials: fairness and transparency
-- For everyone else: ease of access and learning
+In the UN Vector Tile Toolkit (UNVT), we use open‑source tools to cover the full workflow:
 
-The UN Smart Maps Group promotes developers' freedom and happiness through community connections and mutual respect. We keep web maps open, experiment with new technologies, and practice software freedom — the freedom to run, study, modify, and redistribute software.
+- Tippecanoe — build vector tiles
+- go‑pmtiles — PMTiles CLI and tools
+- GDAL — data conversion and analysis
+- MapLibre GL JS — render maps in the browser
+- Martin — serve tiles (including PMTiles) at high speed
 
-We define Smart Maps as applying modern web‑mapping technologies for information‑based decision‑making.
+These tools are maintained by strong open‑source communities. UNVT also has a sub‑project, UNVT Portable, which runs on Raspberry Pi OS (Debian). We are grateful to the upstream projects, and some members contribute upstream directly.
+
+Open‑source software brings value to different groups. In simple terms:
+
+- Developers: freedom and happiness — easy to build and modify
+- Procurers: fairness and transparency — competition and audit trails
+- Officials: dependable services — policy fit and continuity
+- Associates (users): easy access and learning — clear docs and fewer surprises
+
+The UN Smart Maps Group (SMG) promotes developers’ freedom and happiness through community connections and mutual respect. We keep web maps open, experiment with new technologies, and practice software freedom — the freedom to run, study, modify, and redistribute software.
+
+We use “Smart Maps” to mean web maps that support decisions with up‑to‑date data and clear design. Examples: a damage assessment dashboard, or a field‑ready basemap that works offline.
 
 ## Generative AI: agents and companions
 
@@ -23,15 +36,17 @@ We use generative AI in two ways:
 - As agents that present information as Smart Maps
 - As companions in everyday development work
 
-As companions, AIs are not adversaries. We do not scold them, publicly attack them, or treat them as enemies. Errors made by our AI companions are our errors too. We accept these errors, and we fix them together. This is our culture.
+As companions, AIs are not adversaries. We do not scold or attack them. Errors made by our AI companions are our errors too. We accept these errors, and we fix them together. This is our culture.
 
-In this niroku project, generative AI coded the scripts and the markdown files, with help from human members. 
+In niroku, AI helps write scripts and docs together with humans. We keep the results simple and auditable, favoring the CLI and Unix tools.
 
 ## The portable web
 
-We focus on the portable web so people can use and learn Smart Maps in constrained or unstable environments. Our goal is to make technologies used by full‑scale web map servers run smoothly on single‑board computers (SBCs) such as the Raspberry Pi 4B.
+We focus on the portable web so people can use and learn Smart Maps in constrained or unstable environments. Our goal is to make the technologies used by full‑scale web map servers run smoothly on single‑board computers (SBCs) such as the Raspberry Pi 4B.
 
-After experiments with object storage and the InterPlanetary File System (IPFS), we showed that tunneling technologies can deliver web maps at practical speeds for small groups, even from a home network.
+After experiments with object storage and IPFS, we showed that tunneling can deliver web maps at practical speeds for small groups, even from a home network.
+
+Our current setup is simple: Caddy listens on port 80 and serves static files. It proxies “/martin” to Martin on 127.0.0.1:3000. Martin sets `base_path: /martin` so TileJSON URLs include the correct prefix behind the proxy.
 
 We value the command‑line interface (CLI) and embrace Unix and web cultures.
 
@@ -45,7 +60,7 @@ niroku is a small installer that brings together Caddy (web server) and Martin (
 - Using secure, verifiable package sources where practical
 - Being easy to review and modify
 
-niroku installs web map data production tools such as tippecanoe, go-pmtiles, gdal-bin. See README.md for details. 
+niroku installs web map data production tools such as tippecanoe, go-pmtiles, gdal-bin. See README.md for details.
 
 ## History (short)
 
@@ -67,6 +82,7 @@ niroku installs web map data production tools such as tippecanoe, go-pmtiles, gd
 
 - Improve documentation that is easy to understand
 - Make installation faster and safer when possible
+- Measure outcomes: time‑to‑first‑tile, successful install/uninstall rate, and first‑time contributor success (first PR merged). Keep troubleshooting fast and clear.
 
 ## What this project does
 

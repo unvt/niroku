@@ -4,7 +4,7 @@
     "protomaps": {
       "type": "vector",
       "attribution": "<a href=\"https://github.com/protomaps/basemaps\">Protomaps</a> © <a href=\"https://openstreetmap.org\">OpenStreetMap</a>",
-      "url": "https://tunnel.optgeo.org/martin/protomaps-basemap"
+      "url": "/martin/pm11"
     }
   },
   "layers": [
@@ -11916,5 +11916,5 @@
     }
   ],
   "sprite": "https://protomaps.github.io/basemaps-assets/sprites/v4/light",
-  "glyphs": "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf"
+  "glyphs": "/fonts/{fontstack}/{range}.pbf"
 }
