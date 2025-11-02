@@ -339,7 +339,7 @@ ${VERSION_CODENAME} stable" | tee /etc/apt/sources.list.d/docker.list > /dev/nul
         usermod -aG docker "${SUDO_USER}"
         log_success "User ${SUDO_USER} added to docker group"
         log_info "Note: ${SUDO_USER} needs to log out and log back in (or start a new shell) for docker group membership to take effect"
-        log_info "Alternatively, run: su - ${SUDO_USER} -c 'docker ps' to test immediately"
+        log_info "Alternatively, run: sudo -u ${SUDO_USER} docker ps (to test immediately as ${SUDO_USER})"
     else
         log_warning "Could not detect user who invoked install.sh (SUDO_USER not set or is root)"
         log_info "To use docker without sudo, manually run: sudo usermod -aG docker YOUR_USERNAME"
