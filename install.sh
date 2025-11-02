@@ -331,6 +331,19 @@ ${VERSION_CODENAME} stable" | tee /etc/apt/sources.list.d/docker.list > /dev/nul
     
     systemctl enable --now docker
     log_success "Docker Engine installed and started"
+    
+    # Add the user who ran install.sh to the docker group
+    # SUDO_USER contains the username when script is run with sudo
+    if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
+        log_info "Adding user ${SUDO_USER} to docker group..."
+        usermod -aG docker "${SUDO_USER}"
+        log_success "User ${SUDO_USER} added to docker group"
+        log_info "Note: ${SUDO_USER} needs to log out and log back in (or start a new shell) for docker group membership to take effect"
+        log_info "Alternatively, run: su - ${SUDO_USER} -c 'docker ps' to test immediately"
+    else
+        log_warning "Could not detect user who invoked install.sh (SUDO_USER not set or is root)"
+        log_info "To use docker without sudo, manually run: sudo usermod -aG docker YOUR_USERNAME"
+    fi
 }
 
 # Install Node.js LTS via NodeSource and Vite globally

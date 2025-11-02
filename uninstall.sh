@@ -411,6 +411,20 @@ main() {
     if systemctl is-enabled docker >/dev/null 2>&1; then
         systemctl disable docker || true
     fi
+    
+    # Remove user from docker group if they were added by install.sh
+    if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
+        if groups "${SUDO_USER}" 2>/dev/null | grep -q "\bdocker\b"; then
+            log_info "Removing user ${SUDO_USER} from docker group..."
+            gpasswd -d "${SUDO_USER}" docker || true
+            log_success "User ${SUDO_USER} removed from docker group"
+        else
+            log_info "User ${SUDO_USER} is not in docker group"
+        fi
+    else
+        log_info "Could not detect user who invoked uninstall.sh (SUDO_USER not set or is root)"
+        log_info "If you were added to docker group, remove manually with: sudo gpasswd -d YOUR_USERNAME docker"
+    fi
     # Purge Docker packages if installed
     DOCKER_PKGS=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
     TO_PURGE=()
