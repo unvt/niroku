@@ -159,10 +159,26 @@ update_system() {
     if [ -f /etc/apt/keyrings/cloudflare-main.gpg ]; then
         rm -f /etc/apt/keyrings/cloudflare-main.gpg
     fi
-    if ! apt-get update -qq; then
-        log_warning "Failed to update system packages. Continuing anyway..."
+    # Use non-interactive mode for automated installs
+    if ! DEBIAN_FRONTEND=noninteractive apt-get update -qq; then
+        log_warning "Failed to update apt lists. Continuing anyway..."
     else
-        log_success "System packages updated"
+        log_info "apt lists updated. Running apt upgrade and cleanup (non-interactive)"
+        # Try a safe upgrade + autoremove to ensure packages required by later steps can be installed.
+        if ! DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq; then
+            log_warning "apt-get upgrade failed; continuing but some packages may be out-of-date"
+        else
+            log_info "System packages upgraded"
+        fi
+
+        # Clean up unused packages to free space
+        if ! DEBIAN_FRONTEND=noninteractive apt-get autoremove -y -qq --purge; then
+            log_warning "apt-get autoremove failed (non-fatal)"
+        else
+            log_info "Autoremoved unused packages"
+        fi
+
+        log_success "System packages update/upgrade sequence completed"
     fi
 }
 
