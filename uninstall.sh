@@ -416,7 +416,8 @@ main() {
     if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
         # Check if user exists before checking group membership
         if id "${SUDO_USER}" >/dev/null 2>&1; then
-            if groups "${SUDO_USER}" 2>/dev/null | grep -q "\bdocker\b"; then
+            # Use id -nG for more portable group membership check
+            if id -nG "${SUDO_USER}" 2>/dev/null | grep -qw "docker"; then
                 log_info "Removing user ${SUDO_USER} from docker group..."
                 gpasswd -d "${SUDO_USER}" docker || true
                 log_success "User ${SUDO_USER} removed from docker group"
