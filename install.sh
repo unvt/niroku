@@ -192,6 +192,7 @@ install_dependencies() {
         "aria2"
         "btop"
         "gdal-bin"
+        "libgdal-dev"
         "git"
         "jq"
         "ruby"

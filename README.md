@@ -94,7 +94,7 @@ What you get:
 The niroku installer will:
 
 1. ✅ **Update system packages** and clean up legacy repositories
-2. ✅ **Install base tools**: `aria2`, `btop`, `gdal-bin`, `git`, `jq`, `ruby`, `tmux`, `vim`
+2. ✅ **Install base tools**: `aria2`, `btop`, `gdal-bin`, `libgdal-dev`, `git`, `jq`, `ruby`, `tmux`, `vim`
 3. ✅ **Install dependencies**: `curl`, `wget`, `hostapd`, `dnsmasq`, `qrencode`, build tools, and related packages
 4. ✅ **Detect architecture** and set compatibility flags for arm64/armv6l
 5. ✅ **Install Caddy** web server (v2.10.2, reverse proxy with CORS support)
@@ -621,7 +621,7 @@ Testing
 8. Remove tippecanoe (if installed from source)
 9. Remove go-pmtiles binary from `/usr/local/bin/pmtiles`
 10. Remove UNVT Portable installation directory (`/opt/niroku`)
-11. Remove base packages (`aria2`, `btop`, `gdal-bin`, `jq`, `ruby`, `tmux`, `vim`)
+11. Remove base packages (`aria2`, `btop`, `gdal-bin`, `libgdal-dev`, `jq`, `ruby`, `tmux`, `vim`)
 12. Optionally remove comprehensive packages (you'll be prompted)
 13. Clean up unused dependencies
 14. Generate uninstallation log at `/tmp/niroku_uninstall.log`
