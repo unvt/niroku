@@ -194,6 +194,7 @@ install_dependencies() {
         "tree"
         "ncdu"
         "gdal-bin"
+        "libgdal-dev"
         "git"
         "jq"
         "ruby"
