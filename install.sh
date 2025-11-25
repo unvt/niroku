@@ -191,6 +191,8 @@ install_dependencies() {
     PACKAGES=(
         "aria2"
         "btop"
+        "tree"
+        "ncdu"
         "gdal-bin"
         "libgdal-dev"
         "git"

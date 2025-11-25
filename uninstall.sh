@@ -23,7 +23,7 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Package lists
 # Base packages from simple installer (PR #2)
-BASE_PACKAGES=(aria2 btop gdal-bin libgdal-dev jq ruby tmux vim)
+BASE_PACKAGES=(aria2 btop tree ncdu gdal-bin libgdal-dev jq ruby tmux vim)
 # Additional packages for Caddy + Martin setup
 # Note: Caddy and Martin are handled separately as they have their own services
 COMPREHENSIVE_PACKAGES=(git curl wget hostapd dnsmasq qrencode debian-keyring debian-archive-keyring apt-transport-https ca-certificates)
