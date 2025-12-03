@@ -197,6 +197,7 @@ install_dependencies() {
         "libgdal-dev"
         "git"
         "jq"
+        "just"
         "ruby"
         "tmux"
         "vim"
